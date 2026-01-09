@@ -594,23 +594,23 @@
             </div>
             
             <nav class="space-y-1">
-                <div class="nav-item active">
+                <div class="nav-item active" onclick="switchView('runs')">
                     <i class="fas fa-play-circle w-5 mr-3"></i>
                     ラン管理
                 </div>
-                <div class="nav-item">
+                <div class="nav-item" onclick="switchView('datasets')">
                     <i class="fas fa-database w-5 mr-3"></i>
                     データセット
                 </div>
-                <div class="nav-item">
+                <div class="nav-item" onclick="switchView('models')">
                     <i class="fas fa-cube w-5 mr-3"></i>
                     モデル
                 </div>
-                <div class="nav-item">
+                <div class="nav-item" onclick="switchView('analysis')">
                     <i class="fas fa-chart-line w-5 mr-3"></i>
                     分析
                 </div>
-                <div class="nav-item">
+                <div class="nav-item" onclick="switchView('settings')">
                     <i class="fas fa-cog w-5 mr-3"></i>
                     設定
                 </div>
@@ -629,23 +629,25 @@
     
     <!-- Main Content -->
     <main class="main-content" id="mainContent">
-        <!-- Header -->
-        <div class="flex items-center justify-between mb-6">
-            <div>
-                <h1 class="text-2xl font-bold text-gray-800">ラン管理</h1>
-                <p class="text-gray-500 text-sm mt-1">学習・予測・最適化タスクの実行と管理</p>
+        <!-- Runs View -->
+        <div id="runsView" class="view-container">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800">ラン管理</h1>
+                    <p class="text-gray-500 text-sm mt-1">学習・予測・最適化タスクの実行と管理</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button class="btn btn-secondary" onclick="openModal()">
+                        <i class="fas fa-plus"></i>
+                        新規ラン（GUI）
+                    </button>
+                    <button class="btn btn-agent" onclick="focusChat()">
+                        <i class="fas fa-robot"></i>
+                        AIに依頼
+                    </button>
+                </div>
             </div>
-            <div class="flex items-center gap-3">
-                <button class="btn btn-secondary" onclick="openModal()">
-                    <i class="fas fa-plus"></i>
-                    新規ラン（GUI）
-                </button>
-                <button class="btn btn-agent" onclick="focusChat()">
-                    <i class="fas fa-robot"></i>
-                    AIに依頼
-                </button>
-            </div>
-        </div>
         
         <!-- Stats Cards -->
         <div class="grid grid-cols-4 gap-4 mb-6">
@@ -825,8 +827,91 @@
                 </div>
             </div>
         </div>
+        </div>
+
+        <!-- Datasets View -->
+        <div id="datasetsView" class="view-container" style="display: none;">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800">データセット管理</h1>
+                    <p class="text-gray-500 text-sm mt-1">インポートされたデータセットの確認・管理</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button class="btn btn-secondary" onclick="refreshDatasets()">
+                        <i class="fas fa-sync"></i>
+                        更新
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-4 gap-4 mb-6">
+                <div class="card p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-2xl font-bold text-gray-800" id="totalDatasets">0</div>
+                            <div class="text-sm text-gray-500">総データセット数</div>
+                        </div>
+                        <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-database text-blue-600"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-2xl font-bold text-green-600" id="totalRows">0</div>
+                            <div class="text-sm text-gray-500">総行数</div>
+                        </div>
+                        <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-table text-green-600"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-2xl font-bold text-purple-600" id="totalColumns">0</div>
+                            <div class="text-sm text-gray-500">平均列数</div>
+                        </div>
+                        <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-columns text-purple-600"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-2xl font-bold text-orange-600" id="latestImport">--</div>
+                            <div class="text-sm text-gray-500">最新インポート</div>
+                        </div>
+                        <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-clock text-orange-600"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Datasets List -->
+            <div class="card">
+                <div class="p-4 border-b border-gray-100 flex items-center justify-between">
+                    <div class="search-input">
+                        <i class="fas fa-search text-gray-400"></i>
+                        <input type="text" placeholder="データセットを検索..." id="datasetSearch">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button class="btn btn-ghost"><i class="fas fa-filter"></i> フィルタ</button>
+                    </div>
+                </div>
+
+                <div id="datasetsList">
+                    <!-- Datasets will be rendered here -->
+                </div>
+            </div>
+        </div>
     </main>
-    
+
     <!-- AI Chat Panel -->
     <aside class="chat-panel" id="chatPanel">
         <!-- Collapsed state toggle -->
@@ -1158,6 +1243,36 @@
         }
 
         // ========================================
+        // View Switching
+        // ========================================
+        function switchView(viewName) {
+            // Hide all views
+            document.querySelectorAll('.view-container').forEach(function(view) {
+                view.style.display = 'none';
+            });
+
+            // Remove active class from all nav items
+            document.querySelectorAll('.nav-item').forEach(function(item) {
+                item.classList.remove('active');
+            });
+
+            // Show selected view
+            if (viewName === 'runs') {
+                document.getElementById('runsView').style.display = 'block';
+                document.querySelectorAll('.nav-item')[0].classList.add('active');
+            } else if (viewName === 'datasets') {
+                document.getElementById('datasetsView').style.display = 'block';
+                document.querySelectorAll('.nav-item')[1].classList.add('active');
+                renderDatasets();
+            } else {
+                // For other views, show runs as default
+                document.getElementById('runsView').style.display = 'block';
+                document.querySelectorAll('.nav-item')[0].classList.add('active');
+                showToast('この機能は開発中です', 'info');
+            }
+        }
+
+        // ========================================
         // Dataset Import from Database App
         // ========================================
         var importedDatasets = [];
@@ -1167,9 +1282,14 @@
             if (stored) {
                 try {
                     var dataset = JSON.parse(stored);
-                    importedDatasets.push(dataset);
 
-                    // Clear after import
+                    // Save to stored datasets
+                    var storedDatasets = JSON.parse(localStorage.getItem('mlapp_datasets_all') || '[]');
+                    storedDatasets.push(dataset);
+                    localStorage.setItem('mlapp_datasets_all', JSON.stringify(storedDatasets));
+                    importedDatasets = storedDatasets;
+
+                    // Clear temporary import
                     localStorage.removeItem('mlapp_dataset');
 
                     // Show notification in chat
@@ -1183,14 +1303,366 @@
                     );
 
                     showToast('データセット "' + dataset.name + '" をインポートしました');
+
+                    // Refresh datasets view if currently viewing
+                    if (document.getElementById('datasetsView').style.display === 'block') {
+                        renderDatasets();
+                    }
                 } catch (e) {
                     console.error('Failed to parse imported dataset:', e);
                 }
             }
         }
 
+        // ========================================
+        // Dataset Management
+        // ========================================
+        function refreshDatasets() {
+            var storedDatasets = JSON.parse(localStorage.getItem('mlapp_datasets_all') || '[]');
+            importedDatasets = storedDatasets;
+            renderDatasets();
+            showToast('データセット一覧を更新しました');
+        }
+
+        function renderDatasets() {
+            var storedDatasets = JSON.parse(localStorage.getItem('mlapp_datasets_all') || '[]');
+            importedDatasets = storedDatasets;
+
+            // Update stats
+            document.getElementById('totalDatasets').textContent = importedDatasets.length;
+
+            var totalRows = importedDatasets.reduce(function(sum, ds) { return sum + (ds.rows || 0); }, 0);
+            document.getElementById('totalRows').textContent = totalRows;
+
+            var avgCols = importedDatasets.length > 0
+                ? Math.round(importedDatasets.reduce(function(sum, ds) { return sum + (ds.columns ? ds.columns.length : 0); }, 0) / importedDatasets.length)
+                : 0;
+            document.getElementById('totalColumns').textContent = avgCols;
+
+            var latestTime = '--';
+            if (importedDatasets.length > 0 && importedDatasets[importedDatasets.length - 1].createdAt) {
+                var date = new Date(importedDatasets[importedDatasets.length - 1].createdAt);
+                latestTime = date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+            }
+            document.getElementById('latestImport').textContent = latestTime;
+
+            // Render dataset list
+            var container = document.getElementById('datasetsList');
+            if (importedDatasets.length === 0) {
+                container.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--gray-400);"><i class="fas fa-database" style="font-size: 48px; margin-bottom: 16px; opacity: 0.3;"></i><div>インポートされたデータセットがありません</div><div style="font-size: 12px; margin-top: 8px;">Database Appから「ML App」ボタンでデータセットを送信してください</div></div>';
+                return;
+            }
+
+            var html = '<table class="data-table"><thead><tr>';
+            html += '<th>データセット名</th>';
+            html += '<th>行数</th>';
+            html += '<th>列数</th>';
+            html += '<th>作成日時</th>';
+            html += '<th>操作</th>';
+            html += '</tr></thead><tbody>';
+
+            importedDatasets.forEach(function(dataset, index) {
+                var createdDate = new Date(dataset.createdAt);
+                var dateStr = createdDate.toLocaleDateString('ja-JP') + ' ' + createdDate.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+
+                html += '<tr>';
+                html += '<td><div class="flex items-center gap-3">';
+                html += '<div class="w-8 h-8 bg-blue-100 rounded flex items-center justify-center">';
+                html += '<i class="fas fa-table text-blue-600 text-sm"></i></div>';
+                html += '<div><div class="font-medium text-gray-800">' + dataset.name + '</div>';
+                html += '<div class="text-xs text-gray-500">' + dataset.columns.slice(0, 3).join(', ') + (dataset.columns.length > 3 ? '...' : '') + '</div>';
+                html += '</div></div></td>';
+                html += '<td><span class="text-sm text-gray-600">' + dataset.rows + '</span></td>';
+                html += '<td><span class="text-sm text-gray-600">' + dataset.columns.length + '</span></td>';
+                html += '<td><span class="text-sm text-gray-600">' + dateStr + '</span></td>';
+                html += '<td><div class="flex items-center gap-2">';
+                html += '<button class="btn btn-ghost btn-sm" onclick="viewDataset(' + index + ')"><i class="fas fa-eye"></i> プレビュー</button>';
+                html += '<button class="btn btn-ghost btn-sm" onclick="useDatasetForML(' + index + ')"><i class="fas fa-play"></i> 使用</button>';
+                html += '<button class="btn btn-ghost btn-sm" onclick="deleteDataset(' + index + ')"><i class="fas fa-trash"></i></button>';
+                html += '</div></td>';
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function viewDataset(index) {
+            var dataset = importedDatasets[index];
+            if (!dataset) return;
+
+            // Calculate column statistics
+            var columnStats = {};
+            dataset.columns.forEach(function(col) {
+                var values = dataset.data.map(function(row) { return row[col]; }).filter(function(v) { return v !== undefined && v !== null && v !== ''; });
+                var numericValues = values.filter(function(v) { return typeof v === 'number' || !isNaN(parseFloat(v)); }).map(function(v) { return parseFloat(v); });
+
+                columnStats[col] = {
+                    count: values.length,
+                    missing: dataset.data.length - values.length,
+                    type: numericValues.length > values.length * 0.8 ? '数値' : 'テキスト'
+                };
+
+                if (numericValues.length > 0) {
+                    var sorted = numericValues.slice().sort(function(a, b) { return a - b; });
+                    columnStats[col].min = Math.min.apply(null, numericValues).toFixed(2);
+                    columnStats[col].max = Math.max.apply(null, numericValues).toFixed(2);
+                    columnStats[col].mean = (numericValues.reduce(function(a, b) { return a + b; }, 0) / numericValues.length).toFixed(2);
+
+                    // Correct median calculation
+                    var mid = Math.floor(sorted.length / 2);
+                    if (sorted.length % 2 === 0) {
+                        // Even number of values: average of two middle values
+                        columnStats[col].median = ((sorted[mid - 1] + sorted[mid]) / 2).toFixed(2);
+                    } else {
+                        // Odd number of values: middle value
+                        columnStats[col].median = sorted[mid].toFixed(2);
+                    }
+                }
+            });
+
+            var html = '<div style="padding: 24px; min-width: 800px;">';
+
+            // Header
+            html += '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">';
+            html += '<div>';
+            html += '<h3 style="font-size: 20px; font-weight: 600; margin-bottom: 8px; color: #1f2937;">' + dataset.name + '</h3>';
+            html += '<div style="color: #6b7280; font-size: 14px;">' + new Date(dataset.createdAt).toLocaleString('ja-JP') + '</div>';
+            html += '</div>';
+            html += '<div style="display: flex; gap: 8px;">';
+            html += '<button onclick="downloadDatasetCSV(' + index + ')" class="btn btn-secondary btn-sm"><i class="fas fa-download"></i> CSV保存</button>';
+            html += '<button onclick="useDatasetForML(' + index + '); this.parentElement.parentElement.parentElement.parentElement.remove();" class="btn btn-primary btn-sm"><i class="fas fa-play"></i> このデータで学習</button>';
+            html += '</div>';
+            html += '</div>';
+
+            // Summary Stats
+            html += '<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px;">';
+            html += '<div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 16px; border-radius: 8px; color: white;">';
+            html += '<div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">総行数</div>';
+            html += '<div style="font-size: 24px; font-weight: 600;">' + dataset.rows + '</div>';
+            html += '</div>';
+            html += '<div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 16px; border-radius: 8px; color: white;">';
+            html += '<div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">総列数</div>';
+            html += '<div style="font-size: 24px; font-weight: 600;">' + dataset.columns.length + '</div>';
+            html += '</div>';
+            html += '<div style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); padding: 16px; border-radius: 8px; color: white;">';
+            html += '<div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">数値列</div>';
+            var numericCols = dataset.columns.filter(function(col) { return columnStats[col].type === '数値'; }).length;
+            html += '<div style="font-size: 24px; font-weight: 600;">' + numericCols + '</div>';
+            html += '</div>';
+            html += '<div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 16px; border-radius: 8px; color: white;">';
+            html += '<div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">テキスト列</div>';
+            html += '<div style="font-size: 24px; font-weight: 600;">' + (dataset.columns.length - numericCols) + '</div>';
+            html += '</div>';
+            html += '</div>';
+
+            // Tabs
+            html += '<div style="border-bottom: 2px solid #e5e7eb; margin-bottom: 20px;">';
+            html += '<div style="display: flex; gap: 4px;">';
+            html += '<button onclick="showPreviewTab(\'data\')" id="tabData" class="preview-tab active" style="padding: 10px 20px; background: white; border: none; border-bottom: 3px solid #6366f1; color: #6366f1; font-weight: 600; cursor: pointer;"><i class="fas fa-table"></i> データ</button>';
+            html += '<button onclick="showPreviewTab(\'stats\')" id="tabStats" class="preview-tab" style="padding: 10px 20px; background: white; border: none; border-bottom: 3px solid transparent; color: #6b7280; cursor: pointer;"><i class="fas fa-chart-bar"></i> 統計</button>';
+            html += '<button onclick="showPreviewTab(\'columns\')" id="tabColumns" class="preview-tab" style="padding: 10px 20px; background: white; border: none; border-bottom: 3px solid transparent; color: #6b7280; cursor: pointer;"><i class="fas fa-columns"></i> カラム一覧</button>';
+            html += '</div>';
+            html += '</div>';
+
+            // Tab Content: Data Preview
+            html += '<div id="previewTabData" class="preview-tab-content">';
+            html += '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">';
+            html += '<div style="font-weight: 600; color: #374151;">データプレビュー</div>';
+            html += '<div style="display: flex; align-items: center; gap: 8px;">';
+            html += '<label style="font-size: 14px; color: #6b7280;">表示行数:</label>';
+            html += '<select onchange="updatePreviewRows(this.value, ' + index + ')" style="padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">';
+            html += '<option value="5">5行</option>';
+            html += '<option value="10" selected>10行</option>';
+            html += '<option value="20">20行</option>';
+            html += '<option value="' + dataset.rows + '">全て (' + dataset.rows + '行)</option>';
+            html += '</select>';
+            html += '</div>';
+            html += '</div>';
+            html += '<div id="dataPreviewTable" style="overflow-x: auto; max-height: 400px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; background: white;">';
+            html += generateDataTable(dataset, 10);
+            html += '</div>';
+            html += '</div>';
+
+            // Tab Content: Statistics
+            html += '<div id="previewTabStats" class="preview-tab-content" style="display: none;">';
+            html += '<div style="font-weight: 600; color: #374151; margin-bottom: 12px;">列統計</div>';
+            html += '<div style="overflow-y: auto; max-height: 400px;">';
+            dataset.columns.forEach(function(col) {
+                var stats = columnStats[col];
+                html += '<div style="background: #f9fafb; padding: 16px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid ' + (stats.type === '数値' ? '#3b82f6' : '#10b981') + ';">';
+                html += '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">';
+                html += '<div style="font-weight: 600; color: #1f2937;">' + col + '</div>';
+                html += '<span style="background: ' + (stats.type === '数値' ? '#dbeafe' : '#d1fae5') + '; color: ' + (stats.type === '数値' ? '#1e40af' : '#065f46') + '; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500;">' + stats.type + '</span>';
+                html += '</div>';
+                html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; font-size: 13px;">';
+                html += '<div><span style="color: #6b7280;">データ数:</span> <strong>' + stats.count + '</strong></div>';
+                html += '<div><span style="color: #6b7280;">欠損値:</span> <strong>' + stats.missing + '</strong></div>';
+                if (stats.min !== undefined) {
+                    html += '<div><span style="color: #6b7280;">最小値:</span> <strong>' + stats.min + '</strong></div>';
+                    html += '<div><span style="color: #6b7280;">最大値:</span> <strong>' + stats.max + '</strong></div>';
+                    html += '<div><span style="color: #6b7280;">平均値:</span> <strong>' + stats.mean + '</strong></div>';
+                    html += '<div><span style="color: #6b7280;">中央値:</span> <strong>' + stats.median + '</strong></div>';
+                }
+                html += '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+            html += '</div>';
+
+            // Tab Content: Columns List
+            html += '<div id="previewTabColumns" class="preview-tab-content" style="display: none;">';
+            html += '<div style="font-weight: 600; color: #374151; margin-bottom: 12px;">カラム一覧 (' + dataset.columns.length + '列)</div>';
+            html += '<div style="display: flex; flex-wrap: wrap; gap: 8px;">';
+            dataset.columns.forEach(function(col, idx) {
+                var stats = columnStats[col];
+                html += '<div style="background: ' + (stats.type === '数値' ? 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)' : 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)') + '; padding: 8px 12px; border-radius: 6px; border: 1px solid ' + (stats.type === '数値' ? '#93c5fd' : '#86efac') + ';">';
+                html += '<div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">#' + (idx + 1) + '</div>';
+                html += '<div style="font-weight: 500; font-size: 13px; color: #1f2937;">' + col + '</div>';
+                html += '<div style="font-size: 11px; color: #6b7280; margin-top: 2px;">' + stats.type + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+            html += '</div>';
+
+            html += '</div>';
+
+            // Show in modal
+            var modal = document.createElement('div');
+            modal.id = 'datasetPreviewModal';
+            modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);';
+            modal.innerHTML = '<div style="background: white; border-radius: 12px; max-width: 95%; max-height: 90%; overflow: auto; position: relative; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);">' + html + '<button onclick="this.parentElement.parentElement.remove()" style="position: absolute; top: 20px; right: 20px; background: #f3f4f6; border: none; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background=\'#e5e7eb\'" onmouseout="this.style.background=\'#f3f4f6\'"><i class="fas fa-times" style="color: #6b7280;"></i></button></div>';
+            document.body.appendChild(modal);
+
+            // Store dataset for preview updates
+            window.currentPreviewDataset = dataset;
+        }
+
+        function generateDataTable(dataset, rowLimit) {
+            var html = '<table style="width: 100%; font-size: 12px; border-collapse: collapse;">';
+            html += '<thead><tr>';
+            dataset.columns.forEach(function(col) {
+                html += '<th style="padding: 10px 12px; text-align: left; background: #f9fafb; border-bottom: 2px solid #e5e7eb; position: sticky; top: 0; font-weight: 600; color: #374151; white-space: nowrap;">' + col + '</th>';
+            });
+            html += '</tr></thead><tbody>';
+
+            var previewData = dataset.data.slice(0, rowLimit);
+            previewData.forEach(function(row, rowIdx) {
+                html += '<tr style="' + (rowIdx % 2 === 0 ? 'background: white;' : 'background: #f9fafb;') + '">';
+                dataset.columns.forEach(function(col) {
+                    var value = row[col];
+                    var displayValue = value !== undefined && value !== null && value !== '' ? value : '<span style="color: #d1d5db;">-</span>';
+                    var isNumeric = typeof value === 'number' || (!isNaN(parseFloat(value)) && value !== '');
+                    html += '<td style="padding: 8px 12px; border-bottom: 1px solid #f3f4f6; ' + (isNumeric ? 'text-align: right; font-family: monospace;' : '') + '">' + displayValue + '</td>';
+                });
+                html += '</tr>';
+            });
+
+            if (dataset.data.length > rowLimit) {
+                html += '<tr><td colspan="' + dataset.columns.length + '" style="padding: 12px; text-align: center; color: #9ca3af; background: #fafafa; font-style: italic;">... 他 ' + (dataset.data.length - rowLimit) + ' 行</td></tr>';
+            }
+
+            html += '</tbody></table>';
+            return html;
+        }
+
+        function showPreviewTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.preview-tab').forEach(function(tab) {
+                tab.style.borderBottomColor = 'transparent';
+                tab.style.color = '#6b7280';
+                tab.style.fontWeight = 'normal';
+            });
+
+            var activeTab = document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
+            if (activeTab) {
+                activeTab.style.borderBottomColor = '#6366f1';
+                activeTab.style.color = '#6366f1';
+                activeTab.style.fontWeight = '600';
+            }
+
+            // Show/hide tab content
+            document.querySelectorAll('.preview-tab-content').forEach(function(content) {
+                content.style.display = 'none';
+            });
+
+            var activeContent = document.getElementById('previewTab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
+            if (activeContent) {
+                activeContent.style.display = 'block';
+            }
+        }
+
+        function updatePreviewRows(rowLimit, index) {
+            var dataset = window.currentPreviewDataset || importedDatasets[index];
+            if (!dataset) return;
+
+            var tableContainer = document.getElementById('dataPreviewTable');
+            if (tableContainer) {
+                tableContainer.innerHTML = generateDataTable(dataset, parseInt(rowLimit));
+            }
+        }
+
+        function downloadDatasetCSV(index) {
+            var dataset = importedDatasets[index];
+            if (!dataset) return;
+
+            var csv = dataset.columns.join(',') + '\n';
+            dataset.data.forEach(function(row) {
+                csv += dataset.columns.map(function(col) {
+                    var val = row[col] !== undefined ? row[col] : '';
+                    return typeof val === 'string' && val.includes(',') ? '"' + val + '"' : val;
+                }).join(',') + '\n';
+            });
+
+            // Add BOM for Excel compatibility (prevents garbled Japanese text)
+            var BOM = '\uFEFF';
+            var csvWithBOM = BOM + csv;
+
+            var blob = new Blob([csvWithBOM], { type: 'text/csv;charset=utf-8;' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = dataset.name + '.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('CSVファイルをダウンロードしました (Excel対応 UTF-8 with BOM)');
+        }
+
+        function useDatasetForML(index) {
+            var dataset = importedDatasets[index];
+            if (!dataset) return;
+
+            switchView('runs');
+            focusChat();
+
+            setTimeout(function() {
+                addMessage(
+                    'データセット "' + dataset.name + '" を選択しました。<br><br>' +
+                    '何を実行しますか？<br>' +
+                    '• 「硬さを予測したい」<br>' +
+                    '• 「LightGBMで学習したい」<br>' +
+                    '• 「最適化を実行したい」',
+                    'agent'
+                );
+            }, 500);
+        }
+
+        function deleteDataset(index) {
+            if (!confirm('このデータセットを削除しますか？')) return;
+
+            importedDatasets.splice(index, 1);
+            localStorage.setItem('mlapp_datasets_all', JSON.stringify(importedDatasets));
+            renderDatasets();
+            showToast('データセットを削除しました');
+        }
+
         // Initialize on load
         document.addEventListener('DOMContentLoaded', function() {
+            // Load existing datasets
+            var storedDatasets = JSON.parse(localStorage.getItem('mlapp_datasets_all') || '[]');
+            importedDatasets = storedDatasets;
+
+            // Check for new import
             checkForImportedDataset();
         });
     </script>
