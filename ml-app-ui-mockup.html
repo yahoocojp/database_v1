@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML App - UI改善案</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-600: #4b5563;
+            --gray-800: #1f2937;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--gray-50);
+        }
+        
+        .sidebar {
+            width: 240px;
+            background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
+            min-height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+        }
+        
+        .main-content {
+            margin-left: 240px;
+            padding: 24px 32px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: box-shadow 0.2s;
+        }
+        
+        .card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .status-running {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+        
+        .status-complete {
+            background: #d1fae5;
+            color: #059669;
+        }
+        
+        .status-failed {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+        
+        .status-waiting {
+            background: #fef3c7;
+            color: #d97706;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: rgba(255,255,255,0.7);
+            transition: all 0.2s;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+        }
+        
+        .nav-item:hover {
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+        
+        .nav-item.active {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border-left-color: #818cf8;
+        }
+        
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: var(--gray-600);
+        }
+        
+        .breadcrumb a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        
+        .data-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--gray-600);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--gray-200);
+            background: var(--gray-50);
+        }
+        
+        .data-table td {
+            padding: 16px;
+            border-bottom: 1px solid var(--gray-100);
+            vertical-align: middle;
+        }
+        
+        .data-table tbody tr {
+            transition: background 0.15s;
+        }
+        
+        .data-table tbody tr:hover {
+            background: var(--gray-50);
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+        
+        .btn-secondary {
+            background: white;
+            color: var(--gray-600);
+            border: 1px solid var(--gray-200);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--gray-50);
+        }
+        
+        .btn-ghost {
+            background: transparent;
+            color: var(--gray-600);
+        }
+        
+        .btn-ghost:hover {
+            background: var(--gray-100);
+        }
+        
+        .search-input {
+            display: flex;
+            align-items: center;
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            padding: 0 12px;
+        }
+        
+        .search-input input {
+            border: none;
+            padding: 10px 8px;
+            outline: none;
+            width: 200px;
+        }
+        
+        .search-input i {
+            color: var(--gray-400);
+        }
+        
+        .progress-bar {
+            height: 6px;
+            background: var(--gray-200);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--primary);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+        
+        .metric-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid var(--gray-100);
+        }
+        
+        .metric-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--gray-800);
+        }
+        
+        .metric-label {
+            font-size: 13px;
+            color: var(--gray-600);
+            margin-top: 4px;
+        }
+        
+        .tab-nav {
+            display: flex;
+            border-bottom: 1px solid var(--gray-200);
+            margin-bottom: 24px;
+        }
+        
+        .tab-item {
+            padding: 12px 20px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-600);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            transition: all 0.2s;
+        }
+        
+        .tab-item:hover {
+            color: var(--gray-800);
+        }
+        
+        .tab-item.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+        
+        .dropdown {
+            position: relative;
+        }
+        
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 160px;
+            z-index: 100;
+            display: none;
+            padding: 8px 0;
+        }
+        
+        .dropdown:hover .dropdown-menu {
+            display: block;
+        }
+        
+        .dropdown-item {
+            padding: 10px 16px;
+            font-size: 14px;
+            color: var(--gray-600);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .dropdown-item:hover {
+            background: var(--gray-50);
+            color: var(--gray-800);
+        }
+        
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--gray-800);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .modal {
+            background: white;
+            border-radius: 16px;
+            width: 480px;
+            max-height: 90vh;
+            overflow: auto;
+        }
+        
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .modal-body {
+            padding: 24px;
+        }
+        
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--gray-200);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-800);
+            margin-bottom: 6px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+        
+        .file-upload {
+            border: 2px dashed var(--gray-200);
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .file-upload:hover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.02);
+        }
+        
+        /* View switching */
+        .view-toggle {
+            display: flex;
+            background: var(--gray-100);
+            border-radius: 8px;
+            padding: 4px;
+        }
+        
+        .view-toggle button {
+            padding: 6px 12px;
+            border: none;
+            background: transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            color: var(--gray-600);
+        }
+        
+        .view-toggle button.active {
+            background: white;
+            color: var(--gray-800);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        /* Chart placeholder */
+        .chart-placeholder {
+            background: linear-gradient(135deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
+            border-radius: 8px;
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--gray-400);
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="p-5">
+            <div class="flex items-center gap-3 text-white mb-8">
+                <div class="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-content-center">
+                    <i class="fas fa-brain text-xl" style="padding: 10px;"></i>
+                </div>
+                <span class="font-bold text-lg">ML Platform</span>
+            </div>
+            
+            <nav>
+                <div class="text-xs text-indigo-300 uppercase tracking-wider mb-3 px-3">メイン</div>
+                <div class="nav-item active">
+                    <i class="fas fa-folder-open w-5 mr-3"></i>
+                    プロジェクト
+                </div>
+                <div class="nav-item">
+                    <i class="fas fa-database w-5 mr-3"></i>
+                    共有データセット
+                </div>
+                <div class="nav-item">
+                    <i class="fas fa-chart-line w-5 mr-3"></i>
+                    モデル比較
+                </div>
+                
+                <div class="text-xs text-indigo-300 uppercase tracking-wider mb-3 mt-6 px-3">設定</div>
+                <div class="nav-item">
+                    <i class="fas fa-bell w-5 mr-3"></i>
+                    通知設定
+                </div>
+                <div class="nav-item">
+                    <i class="fas fa-book w-5 mr-3"></i>
+                    マニュアル
+                </div>
+                <div class="nav-item">
+                    <i class="fas fa-bug w-5 mr-3"></i>
+                    不具合報告
+                </div>
+            </nav>
+        </div>
+        
+        <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-indigo-800">
+            <div class="flex items-center gap-3 text-white">
+                <div class="avatar">田</div>
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium truncate">tanaka@example.co.jp</div>
+                    <div class="text-xs text-indigo-300">R&D部門</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <div class="breadcrumb mb-2">
+                    <a href="#">ホーム</a>
+                    <i class="fas fa-chevron-right text-xs"></i>
+                    <a href="#">材料分析PJ</a>
+                    <i class="fas fa-chevron-right text-xs"></i>
+                    <span>タスク管理</span>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-800">炭化物粒径予測</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <button class="btn btn-secondary">
+                    <i class="fas fa-download"></i>
+                    エクスポート
+                </button>
+                <button class="btn btn-primary" onclick="openModal()">
+                    <i class="fas fa-plus"></i>
+                    新規実行
+                </button>
+            </div>
+        </div>
+        
+        <!-- Metrics -->
+        <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="metric-card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="metric-value">24</div>
+                        <div class="metric-label">総ラン数</div>
+                    </div>
+                    <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-play text-indigo-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="metric-value text-green-600">18</div>
+                        <div class="metric-label">完了</div>
+                    </div>
+                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-check text-green-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="metric-value text-blue-600">3</div>
+                        <div class="metric-label">実行中</div>
+                    </div>
+                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-spinner fa-spin text-blue-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="metric-value">0.923</div>
+                        <div class="metric-label">最高R²スコア</div>
+                    </div>
+                    <div class="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-trophy text-amber-600"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tabs & Filters -->
+        <div class="card mb-6">
+            <div class="px-6 pt-4">
+                <div class="flex items-center justify-between">
+                    <div class="tab-nav" style="border: none; margin: 0;">
+                        <div class="tab-item active">すべて</div>
+                        <div class="tab-item">学習</div>
+                        <div class="tab-item">予測</div>
+                        <div class="tab-item">最適化</div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="search-input">
+                            <i class="fas fa-search"></i>
+                            <input type="text" placeholder="検索...">
+                        </div>
+                        <div class="view-toggle">
+                            <button class="active"><i class="fas fa-list"></i></button>
+                            <button><i class="fas fa-th-large"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Table -->
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ラン名</th>
+                        <th>タイプ</th>
+                        <th>データセット</th>
+                        <th>スコア</th>
+                        <th>ステータス</th>
+                        <th>作成日</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 bg-indigo-100 rounded flex items-center justify-center">
+                                    <i class="fas fa-graduation-cap text-indigo-600 text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-gray-800">run_20250610_001</div>
+                                    <div class="text-xs text-gray-500">RandomForest + GridSearch</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="text-sm text-gray-600">学習</span></td>
+                        <td><span class="text-sm text-gray-600">carbide_dataset_v3</span></td>
+                        <td>
+                            <div class="text-sm font-medium text-gray-800">R²: 0.923</div>
+                            <div class="text-xs text-gray-500">RMSE: 0.142</div>
+                        </td>
+                        <td><span class="status-badge status-complete"><i class="fas fa-check-circle mr-1"></i>完了</span></td>
+                        <td><span class="text-sm text-gray-600">2025/06/10 14:32</span></td>
+                        <td>
+                            <div class="dropdown">
+                                <button class="btn btn-ghost">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                                <div class="dropdown-menu">
+                                    <div class="dropdown-item"><i class="fas fa-eye"></i>詳細を見る</div>
+                                    <div class="dropdown-item"><i class="fas fa-copy"></i>複製して実行</div>
+                                    <div class="dropdown-item"><i class="fas fa-download"></i>モデルDL</div>
+                                    <div class="dropdown-item" style="color: #dc2626;"><i class="fas fa-trash"></i>削除</div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 bg-blue-100 rounded flex items-center justify-center">
+                                    <i class="fas fa-bullseye text-blue-600 text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-gray-800">run_20250610_002</div>
+                                    <div class="text-xs text-gray-500">Optuna (NSGA-II)</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="text-sm text-gray-600">最適化</span></td>
+                        <td><span class="text-sm text-gray-600">carbide_dataset_v3</span></td>
+                        <td>
+                            <div class="text-sm text-gray-500">—</div>
+                        </td>
+                        <td>
+                            <div>
+                                <span class="status-badge status-running"><i class="fas fa-spinner fa-spin mr-1"></i>実行中</span>
+                                <div class="progress-bar mt-2" style="width: 100px;">
+                                    <div class="progress-bar-fill" style="width: 65%;"></div>
+                                </div>
+                                <div class="text-xs text-gray-500 mt-1">65% (130/200 trials)</div>
+                            </div>
+                        </td>
+                        <td><span class="text-sm text-gray-600">2025/06/10 15:10</span></td>
+                        <td>
+                            <div class="dropdown">
+                                <button class="btn btn-ghost">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                                <div class="dropdown-menu">
+                                    <div class="dropdown-item"><i class="fas fa-eye"></i>進捗を見る</div>
+                                    <div class="dropdown-item"><i class="fas fa-stop"></i>キャンセル</div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 bg-purple-100 rounded flex items-center justify-center">
+                                    <i class="fas fa-magic text-purple-600 text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-gray-800">run_20250609_005</div>
+                                    <div class="text-xs text-gray-500">LightGBM予測</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="text-sm text-gray-600">予測</span></td>
+                        <td><span class="text-sm text-gray-600">new_samples_0609</span></td>
+                        <td>
+                            <div class="text-sm text-gray-500">—</div>
+                        </td>
+                        <td><span class="status-badge status-complete"><i class="fas fa-check-circle mr-1"></i>完了</span></td>
+                        <td><span class="text-sm text-gray-600">2025/06/09 10:45</span></td>
+                        <td>
+                            <div class="dropdown">
+                                <button class="btn btn-ghost">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                                <div class="dropdown-menu">
+                                    <div class="dropdown-item"><i class="fas fa-eye"></i>結果を見る</div>
+                                    <div class="dropdown-item"><i class="fas fa-download"></i>CSV出力</div>
+                                    <div class="dropdown-item" style="color: #dc2626;"><i class="fas fa-trash"></i>削除</div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 bg-gray-100 rounded flex items-center justify-center">
+                                    <i class="fas fa-graduation-cap text-gray-400 text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-gray-800">run_20250608_003</div>
+                                    <div class="text-xs text-gray-500">XGBoost + BayesOpt</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="text-sm text-gray-600">学習</span></td>
+                        <td><span class="text-sm text-gray-600">carbide_dataset_v2</span></td>
+                        <td>
+                            <div class="text-sm font-medium text-gray-800">R²: 0.891</div>
+                            <div class="text-xs text-gray-500">RMSE: 0.178</div>
+                        </td>
+                        <td><span class="status-badge status-failed"><i class="fas fa-times-circle mr-1"></i>失敗</span></td>
+                        <td><span class="text-sm text-gray-600">2025/06/08 09:20</span></td>
+                        <td>
+                            <div class="dropdown">
+                                <button class="btn btn-ghost">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                                <div class="dropdown-menu">
+                                    <div class="dropdown-item"><i class="fas fa-file-alt"></i>ログを見る</div>
+                                    <div class="dropdown-item"><i class="fas fa-redo"></i>再実行</div>
+                                    <div class="dropdown-item" style="color: #dc2626;"><i class="fas fa-trash"></i>削除</div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <!-- Pagination -->
+            <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+                <div class="text-sm text-gray-600">24件中 1-10件を表示</div>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-ghost" disabled><i class="fas fa-chevron-left"></i></button>
+                    <button class="btn btn-ghost" style="background: var(--primary); color: white;">1</button>
+                    <button class="btn btn-ghost">2</button>
+                    <button class="btn btn-ghost">3</button>
+                    <button class="btn btn-ghost"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Modal -->
+    <div class="modal-overlay" id="modal" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="text-lg font-semibold">新規ラン作成</h3>
+                <button class="btn btn-ghost" onclick="closeModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">ラン名</label>
+                    <input type="text" class="form-input" placeholder="run_20250610_003">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">タイプ</label>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="p-4 border-2 border-indigo-500 rounded-lg cursor-pointer bg-indigo-50">
+                            <div class="text-center">
+                                <i class="fas fa-graduation-cap text-indigo-600 text-xl mb-2"></i>
+                                <div class="font-medium text-sm">学習</div>
+                            </div>
+                        </div>
+                        <div class="p-4 border border-gray-200 rounded-lg cursor-pointer hover:border-gray-300">
+                            <div class="text-center">
+                                <i class="fas fa-magic text-gray-400 text-xl mb-2"></i>
+                                <div class="font-medium text-sm text-gray-600">予測</div>
+                            </div>
+                        </div>
+                        <div class="p-4 border border-gray-200 rounded-lg cursor-pointer hover:border-gray-300">
+                            <div class="text-center">
+                                <i class="fas fa-bullseye text-gray-400 text-xl mb-2"></i>
+                                <div class="font-medium text-sm text-gray-600">最適化</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">データセット</label>
+                    <select class="form-input">
+                        <option>carbide_dataset_v3</option>
+                        <option>carbide_dataset_v2</option>
+                        <option>new_samples_0609</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">説明変数</label>
+                    <div class="p-3 bg-gray-50 rounded-lg">
+                        <div class="flex flex-wrap gap-2">
+                            <span class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm">
+                                Temperature <i class="fas fa-times ml-1 cursor-pointer"></i>
+                            </span>
+                            <span class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm">
+                                Pressure <i class="fas fa-times ml-1 cursor-pointer"></i>
+                            </span>
+                            <span class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm">
+                                Time <i class="fas fa-times ml-1 cursor-pointer"></i>
+                            </span>
+                            <span class="px-3 py-1 bg-gray-200 text-gray-600 rounded-full text-sm cursor-pointer">
+                                + 追加
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">目的変数</label>
+                    <select class="form-input">
+                        <option>Particle_Size</option>
+                        <option>Hardness</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">説明（任意）</label>
+                    <textarea class="form-input" rows="2" placeholder="実験の目的やメモを入力..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+                <button class="btn btn-primary">
+                    <i class="fas fa-play"></i>
+                    実行開始
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast Notification -->
+    <div class="toast" id="toast" style="display: none;">
+        <i class="fas fa-check-circle text-green-400"></i>
+        <span>ランを開始しました</span>
+    </div>
+    
+    <script>
+        // Dataset management
+        var importedDatasets = [];
+
+        function init() {
+            checkForImportedDataset();
+            renderDatasetOptions();
+        }
+
+        function checkForImportedDataset() {
+            var stored = localStorage.getItem('mlapp_dataset');
+            if (stored) {
+                try {
+                    var dataset = JSON.parse(stored);
+                    importedDatasets.push(dataset);
+                    showToast('データセット "' + dataset.name + '" をインポートしました (' + dataset.rows + '行)', 'success');
+                    // Clear after import
+                    localStorage.removeItem('mlapp_dataset');
+                    renderDatasetOptions();
+                } catch (e) {
+                    console.error('Failed to parse imported dataset:', e);
+                }
+            }
+        }
+
+        function renderDatasetOptions() {
+            var select = document.querySelector('select.form-input');
+            if (!select) return;
+
+            // Keep existing options and add imported ones
+            importedDatasets.forEach(function(ds) {
+                var exists = Array.from(select.options).some(function(opt) { return opt.value === ds.name; });
+                if (!exists) {
+                    var option = document.createElement('option');
+                    option.value = ds.name;
+                    option.textContent = ds.name + ' (' + ds.rows + '行, インポート)';
+                    option.selected = true;
+                    select.insertBefore(option, select.firstChild);
+                }
+            });
+        }
+
+        function openModal() {
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        function showToast(message, type) {
+            var toast = document.getElementById('toast');
+            var span = toast.querySelector('span');
+            var icon = toast.querySelector('i');
+
+            span.textContent = message;
+            icon.className = type === 'success' ? 'fas fa-check-circle text-green-400' :
+                             type === 'error' ? 'fas fa-times-circle text-red-400' :
+                             'fas fa-info-circle text-blue-400';
+
+            toast.style.display = 'flex';
+            setTimeout(function() {
+                toast.style.display = 'none';
+            }, 4000);
+        }
+
+        // Click outside to close
+        document.getElementById('modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
