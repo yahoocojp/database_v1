@@ -1688,8 +1688,8 @@
             localStorage.setItem('mlapp_dataset', JSON.stringify(exportData));
             showToast('Dataset ready for ML App (' + dataset.length + ' rows)', 'success');
 
-            // Open ML App in new tab (adjust URL as needed)
-            var mlAppUrl = window.location.origin + '/ml-app-ui-mockup (1).html';
+            // Open ML App in new tab
+            var mlAppUrl = window.location.origin + '/ml-app.html';
             window.open(mlAppUrl, '_blank');
         }
 
