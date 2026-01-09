@@ -946,11 +946,18 @@
         var isolateModeActive = false;
 
         function isolateSelected() {
+            // Toggle off if already active
+            if (isolateModeActive) {
+                clearIsolate();
+                showToast('Isolate mode: OFF', 'info');
+                return;
+            }
+
             if (!selectedNode) {
                 showToast('Select a node first', 'warning');
                 return;
             }
-            
+
             var nodeId = selectedNode.id;
             
             fetch('/api/trace/' + nodeId)
