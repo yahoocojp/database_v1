@@ -362,9 +362,9 @@ app.get('/api/trace/:id', function(req, res) {
     // Start tracing
     visited = {};
     traceUpstream(id);
-    
+
     visited = {};
-    visited[id] = true; // Don't include starting node
+    // Don't mark starting node as visited before calling traceDownstream
     traceDownstream(id);
     
     // Remove duplicates
