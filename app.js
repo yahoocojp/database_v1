@@ -414,7 +414,10 @@ app.post('/api/search', function(req, res) {
 
 // Start server
 app.listen(PORT, function() {
+    console.log('========================================');
     console.log('R&D Experiment Manager (Sample Data Mode)');
     console.log('Server running on port ' + PORT);
+    console.log('Started at: ' + new Date().toISOString());
     console.log('Data: ' + sampleData.materials.length + ' materials, ' + sampleData.testPieces.length + ' test pieces');
+    console.log('========================================');
 });
