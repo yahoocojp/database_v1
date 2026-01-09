@@ -173,12 +173,12 @@ var app = express();
 var PORT = process.env.PORT || 8000;
 
 // Static files from root
-app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 // Root route
 app.get('/', function(req, res) {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ========================================
