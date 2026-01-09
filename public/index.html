@@ -208,6 +208,24 @@
         .orphan-section { position: absolute; bottom: 150px; left: 20px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px 12px; z-index: 10; }
         .orphan-title { font-size: 0.65em; color: var(--text-muted); margin-bottom: 4px; }
         .orphan-count { font-size: 0.8em; font-weight: 600; color: var(--warning); }
+
+        /* Dataset Export */
+        .dataset-section { margin-bottom: 12px; }
+        .dataset-section-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; cursor: pointer; }
+        .dataset-section-header:hover { color: var(--text-primary); }
+        .dataset-section-title { font-size: 0.7em; font-weight: 600; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+        .dataset-section-title .layer-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .dataset-section-toggle { font-size: 0.6em; color: var(--text-muted); }
+        .dataset-columns { padding-left: 14px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+        .dataset-columns.expanded { max-height: 200px; }
+        .dataset-column-item { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 0.65em; color: var(--text-secondary); }
+        .dataset-column-item input[type="checkbox"] { width: 12px; height: 12px; accent-color: var(--accent-primary); }
+        .dataset-column-item label { cursor: pointer; flex: 1; }
+        .dataset-preview { margin-top: 8px; padding: 8px; background: var(--bg-primary); border-radius: var(--radius-sm); font-size: 0.6em; color: var(--text-muted); max-height: 100px; overflow: auto; }
+        .dataset-actions { display: flex; gap: 6px; margin-top: 8px; }
+        .dataset-actions .btn { flex: 1; font-size: 0.65em; padding: 6px 8px; }
+        .btn-ml { background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; }
+        .btn-ml:hover { background: linear-gradient(135deg, #4f46e5, #7c3aed); }
     </style>
 </head>
 <body>
@@ -269,6 +287,20 @@
                     <div class="status-indicator">
                         <span class="status-dot" style="background: var(--warning);"></span>
                         <span>Sample Data Mode</span>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-icon">📊</div>
+                        <span class="panel-title">Dataset Export</span>
+                    </div>
+                    <div id="datasetColumnSelector"></div>
+                    <div class="dataset-preview" id="datasetPreview">
+                        Select columns to preview dataset...
+                    </div>
+                    <div class="dataset-actions">
+                        <button class="btn btn-secondary" onclick="exportDatasetCSV()">CSV</button>
+                        <button class="btn btn-ml" onclick="sendToMLApp()">→ ML App</button>
                     </div>
                 </div>
             </div>
@@ -504,6 +536,8 @@
                 rawData.analysisSample = results[4];
                 renderStats();
                 buildGraph();
+                renderDatasetColumnSelector();
+                updateDatasetPreview();
                 showLoading(false);
                 showToast(allNodes.length + ' nodes loaded', 'success');
             });
@@ -1412,6 +1446,218 @@
             a.click();
             URL.revokeObjectURL(url);
             showToast('Data exported', 'success');
+        }
+
+        // ========================================
+        // Dataset Export (Flat Table)
+        // ========================================
+        var datasetColumnConfig = {
+            material: { enabled: true, columns: { steelGrade: true, maker: true, shape: false, dimension: false } },
+            heatTreatment: { enabled: true, columns: { quenchMethod: true, quenchTemp: true, temperTemp: true, quenchCool: false, temperMethod: false } },
+            product: { enabled: true, columns: { id: true, createdAt: true, stock: false } },
+            testPiece: { enabled: true, columns: { processId: false, status: false } },
+            analysisSample: { enabled: true, columns: { hardness: true } }
+        };
+        var datasetExpandedSections = {};
+
+        function renderDatasetColumnSelector() {
+            var container = document.getElementById('datasetColumnSelector');
+            if (!container || !rawData) return;
+
+            var html = '';
+            var layerColors = { material: '#22d3ee', heatTreatment: '#f59e0b', product: '#10b981', testPiece: '#a78bfa', analysisSample: '#f472b6' };
+            var layerNames = { material: 'Material', heatTreatment: 'Heat Treatment', product: 'Product', testPiece: 'Test Piece', analysisSample: 'Analysis' };
+
+            Object.keys(datasetColumnConfig).forEach(function(layer) {
+                var cfg = datasetColumnConfig[layer];
+                var expanded = datasetExpandedSections[layer];
+                var sampleData = rawData[layer] && rawData[layer][0] ? rawData[layer][0] : {};
+                var columns = Object.keys(sampleData).filter(function(k) { return k !== 'note' && k !== 'id' || layer === 'product'; });
+
+                html += '<div class="dataset-section">';
+                html += '<div class="dataset-section-header" onclick="toggleDatasetSection(\'' + layer + '\')">';
+                html += '<div class="dataset-section-title"><span class="layer-dot" style="background:' + layerColors[layer] + '"></span>' + layerNames[layer] + '</div>';
+                html += '<span class="dataset-section-toggle">' + (expanded ? '▼' : '▶') + '</span>';
+                html += '</div>';
+                html += '<div class="dataset-columns ' + (expanded ? 'expanded' : '') + '" id="dataset-cols-' + layer + '">';
+
+                columns.forEach(function(col) {
+                    var checked = cfg.columns[col] !== false;
+                    html += '<div class="dataset-column-item">';
+                    html += '<input type="checkbox" id="dscol-' + layer + '-' + col + '" ' + (checked ? 'checked' : '') + ' onchange="updateDatasetColumn(\'' + layer + '\', \'' + col + '\', this.checked)">';
+                    html += '<label for="dscol-' + layer + '-' + col + '">' + col + '</label>';
+                    html += '</div>';
+                });
+
+                html += '</div></div>';
+            });
+
+            container.innerHTML = html;
+        }
+
+        function toggleDatasetSection(layer) {
+            datasetExpandedSections[layer] = !datasetExpandedSections[layer];
+            var el = document.getElementById('dataset-cols-' + layer);
+            if (el) el.classList.toggle('expanded', datasetExpandedSections[layer]);
+            var header = el ? el.previousElementSibling : null;
+            if (header) {
+                var toggle = header.querySelector('.dataset-section-toggle');
+                if (toggle) toggle.textContent = datasetExpandedSections[layer] ? '▼' : '▶';
+            }
+        }
+
+        function updateDatasetColumn(layer, col, enabled) {
+            if (!datasetColumnConfig[layer]) return;
+            datasetColumnConfig[layer].columns[col] = enabled;
+            updateDatasetPreview();
+        }
+
+        function buildFlatDataset() {
+            if (!rawData || !rawData.product) return [];
+
+            var dataset = [];
+            var products = rawData.product || [];
+            var materials = rawData.material || [];
+            var heatTreatments = rawData.heatTreatment || [];
+            var testPieces = rawData.testPiece || [];
+            var analysisSamples = rawData.analysisSample || [];
+
+            products.forEach(function(product) {
+                var row = {};
+
+                // Product columns
+                if (datasetColumnConfig.product.enabled) {
+                    Object.keys(datasetColumnConfig.product.columns).forEach(function(col) {
+                        if (datasetColumnConfig.product.columns[col] && product[col] !== undefined) {
+                            row['product_' + col] = product[col];
+                        }
+                    });
+                }
+
+                // Material columns (join by materialId)
+                if (datasetColumnConfig.material.enabled) {
+                    var material = materials.find(function(m) { return m.id === product.materialId; });
+                    if (material) {
+                        Object.keys(datasetColumnConfig.material.columns).forEach(function(col) {
+                            if (datasetColumnConfig.material.columns[col] && material[col] !== undefined) {
+                                row['material_' + col] = material[col];
+                            }
+                        });
+                    }
+                }
+
+                // HeatTreatment columns (join by heatTreatId)
+                if (datasetColumnConfig.heatTreatment.enabled) {
+                    var ht = heatTreatments.find(function(h) { return h.id === product.heatTreatId; });
+                    if (ht) {
+                        Object.keys(datasetColumnConfig.heatTreatment.columns).forEach(function(col) {
+                            if (datasetColumnConfig.heatTreatment.columns[col] && ht[col] !== undefined) {
+                                row['ht_' + col] = ht[col];
+                            }
+                        });
+                    }
+                }
+
+                // TestPiece & AnalysisSample (aggregate by productId)
+                var productTPs = testPieces.filter(function(tp) { return tp.productId === product.id; });
+                var productAnalysis = analysisSamples.filter(function(as) {
+                    return as.productId === product.id || productTPs.some(function(tp) { return tp.id === as.testPieceId; });
+                });
+
+                // Aggregate numeric values from AnalysisSample
+                if (datasetColumnConfig.analysisSample.enabled && productAnalysis.length > 0) {
+                    Object.keys(datasetColumnConfig.analysisSample.columns).forEach(function(col) {
+                        if (datasetColumnConfig.analysisSample.columns[col]) {
+                            var values = productAnalysis.map(function(as) { return as[col]; }).filter(function(v) { return typeof v === 'number'; });
+                            if (values.length > 0) {
+                                var avg = values.reduce(function(a, b) { return a + b; }, 0) / values.length;
+                                row['avg_' + col] = Math.round(avg * 100) / 100;
+                            }
+                        }
+                    });
+                }
+
+                dataset.push(row);
+            });
+
+            return dataset;
+        }
+
+        function updateDatasetPreview() {
+            var preview = document.getElementById('datasetPreview');
+            if (!preview) return;
+
+            var dataset = buildFlatDataset();
+            if (dataset.length === 0) {
+                preview.textContent = 'No data available';
+                return;
+            }
+
+            var columns = Object.keys(dataset[0]);
+            var html = '<div style="overflow-x:auto;"><table style="font-size:0.6em;border-collapse:collapse;width:100%;">';
+            html += '<tr>' + columns.map(function(c) { return '<th style="padding:2px 4px;border-bottom:1px solid #333;text-align:left;white-space:nowrap;">' + c + '</th>'; }).join('') + '</tr>';
+
+            dataset.slice(0, 3).forEach(function(row) {
+                html += '<tr>' + columns.map(function(c) { return '<td style="padding:2px 4px;white-space:nowrap;">' + (row[c] !== undefined ? row[c] : '-') + '</td>'; }).join('') + '</tr>';
+            });
+
+            if (dataset.length > 3) {
+                html += '<tr><td colspan="' + columns.length + '" style="padding:4px;color:#666;">... and ' + (dataset.length - 3) + ' more rows</td></tr>';
+            }
+            html += '</table></div>';
+            html += '<div style="margin-top:4px;">' + dataset.length + ' rows × ' + columns.length + ' columns</div>';
+
+            preview.innerHTML = html;
+        }
+
+        function exportDatasetCSV() {
+            var dataset = buildFlatDataset();
+            if (dataset.length === 0) {
+                showToast('No data to export', 'warning');
+                return;
+            }
+
+            var columns = Object.keys(dataset[0]);
+            var csv = columns.join(',') + '\n';
+            dataset.forEach(function(row) {
+                csv += columns.map(function(c) {
+                    var val = row[c] !== undefined ? row[c] : '';
+                    return typeof val === 'string' && val.includes(',') ? '"' + val + '"' : val;
+                }).join(',') + '\n';
+            });
+
+            var blob = new Blob([csv], { type: 'text/csv' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'dataset_' + new Date().toISOString().slice(0,10) + '.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Dataset exported as CSV', 'success');
+        }
+
+        function sendToMLApp() {
+            var dataset = buildFlatDataset();
+            if (dataset.length === 0) {
+                showToast('No data to send', 'warning');
+                return;
+            }
+
+            // Store dataset in localStorage for ML App to pick up
+            var exportData = {
+                name: 'experiment_dataset_' + new Date().toISOString().slice(0,19).replace(/[:-]/g, ''),
+                createdAt: new Date().toISOString(),
+                rows: dataset.length,
+                columns: Object.keys(dataset[0]),
+                data: dataset
+            };
+
+            localStorage.setItem('mlapp_dataset', JSON.stringify(exportData));
+            showToast('Dataset ready for ML App (' + dataset.length + ' rows)', 'success');
+
+            // Open ML App in new tab (adjust URL as needed)
+            var mlAppUrl = window.location.origin + '/ml-app-ui-mockup (1).html';
+            window.open(mlAppUrl, '_blank');
         }
 
         // ========================================

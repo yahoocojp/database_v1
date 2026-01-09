@@ -863,20 +863,80 @@
     </div>
     
     <script>
+        // Dataset management
+        var importedDatasets = [];
+
+        function init() {
+            checkForImportedDataset();
+            renderDatasetOptions();
+        }
+
+        function checkForImportedDataset() {
+            var stored = localStorage.getItem('mlapp_dataset');
+            if (stored) {
+                try {
+                    var dataset = JSON.parse(stored);
+                    importedDatasets.push(dataset);
+                    showToast('データセット "' + dataset.name + '" をインポートしました (' + dataset.rows + '行)', 'success');
+                    // Clear after import
+                    localStorage.removeItem('mlapp_dataset');
+                    renderDatasetOptions();
+                } catch (e) {
+                    console.error('Failed to parse imported dataset:', e);
+                }
+            }
+        }
+
+        function renderDatasetOptions() {
+            var select = document.querySelector('select.form-input');
+            if (!select) return;
+
+            // Keep existing options and add imported ones
+            importedDatasets.forEach(function(ds) {
+                var exists = Array.from(select.options).some(function(opt) { return opt.value === ds.name; });
+                if (!exists) {
+                    var option = document.createElement('option');
+                    option.value = ds.name;
+                    option.textContent = ds.name + ' (' + ds.rows + '行, インポート)';
+                    option.selected = true;
+                    select.insertBefore(option, select.firstChild);
+                }
+            });
+        }
+
         function openModal() {
             document.getElementById('modal').style.display = 'flex';
         }
-        
+
         function closeModal() {
             document.getElementById('modal').style.display = 'none';
         }
-        
+
+        function showToast(message, type) {
+            var toast = document.getElementById('toast');
+            var span = toast.querySelector('span');
+            var icon = toast.querySelector('i');
+
+            span.textContent = message;
+            icon.className = type === 'success' ? 'fas fa-check-circle text-green-400' :
+                             type === 'error' ? 'fas fa-times-circle text-red-400' :
+                             'fas fa-info-circle text-blue-400';
+
+            toast.style.display = 'flex';
+            setTimeout(function() {
+                toast.style.display = 'none';
+            }, 4000);
+        }
+
         // Click outside to close
         document.getElementById('modal').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeModal();
             }
         });
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>
