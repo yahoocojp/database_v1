@@ -187,9 +187,11 @@ app.get('/', function(req, res) {
 
 // Health check
 app.get('/health', function(req, res) {
-    res.json({ 
-        status: 'ok', 
+    res.json({
+        status: 'ok',
         mode: 'sample-data',
+        version: '1.0.1',
+        message: 'Claude Code から更新しました！',
         timestamp: new Date().toISOString()
     });
 });
