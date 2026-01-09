@@ -1472,7 +1472,11 @@
                 var cfg = datasetColumnConfig[layer];
                 var expanded = datasetExpandedSections[layer];
                 var sampleData = rawData[layer] && rawData[layer][0] ? rawData[layer][0] : {};
-                var columns = Object.keys(sampleData).filter(function(k) { return k !== 'note' && k !== 'id' || layer === 'product'; });
+                // Show all columns except foreign key IDs (materialId, heatTreatId, productId, testPieceId)
+                var excludeKeys = ['materialId', 'heatTreatId', 'productId', 'testPieceId', 'processId'];
+                var columns = Object.keys(sampleData).filter(function(k) {
+                    return excludeKeys.indexOf(k) === -1 && (k !== 'id' || layer === 'product');
+                });
 
                 html += '<div class="dataset-section">';
                 html += '<div class="dataset-section-header" onclick="toggleDatasetSection(\'' + layer + '\')">';
@@ -1522,56 +1526,85 @@
             var testPieces = rawData.testPiece || [];
             var analysisSamples = rawData.analysisSample || [];
 
+            // Helper to check if column is enabled (true if not explicitly false)
+            function isColumnEnabled(layer, col) {
+                var cfg = datasetColumnConfig[layer];
+                if (!cfg || !cfg.enabled) return false;
+                return cfg.columns[col] !== false;
+            }
+
+            // Get all columns from sample data for each layer
+            function getLayerColumns(layer) {
+                var sample = rawData[layer] && rawData[layer][0] ? rawData[layer][0] : {};
+                var excludeKeys = ['materialId', 'heatTreatId', 'productId', 'testPieceId', 'processId'];
+                return Object.keys(sample).filter(function(k) {
+                    return excludeKeys.indexOf(k) === -1 && (k !== 'id' || layer === 'product');
+                });
+            }
+
             products.forEach(function(product) {
                 var row = {};
 
                 // Product columns
-                if (datasetColumnConfig.product.enabled) {
-                    Object.keys(datasetColumnConfig.product.columns).forEach(function(col) {
-                        if (datasetColumnConfig.product.columns[col] && product[col] !== undefined) {
-                            row['product_' + col] = product[col];
+                getLayerColumns('product').forEach(function(col) {
+                    if (isColumnEnabled('product', col) && product[col] !== undefined) {
+                        row['product_' + col] = product[col];
+                    }
+                });
+
+                // Material columns (join by materialId)
+                var material = materials.find(function(m) { return m.id === product.materialId; });
+                if (material) {
+                    getLayerColumns('material').forEach(function(col) {
+                        if (isColumnEnabled('material', col) && material[col] !== undefined) {
+                            row['material_' + col] = material[col];
                         }
                     });
                 }
 
-                // Material columns (join by materialId)
-                if (datasetColumnConfig.material.enabled) {
-                    var material = materials.find(function(m) { return m.id === product.materialId; });
-                    if (material) {
-                        Object.keys(datasetColumnConfig.material.columns).forEach(function(col) {
-                            if (datasetColumnConfig.material.columns[col] && material[col] !== undefined) {
-                                row['material_' + col] = material[col];
-                            }
-                        });
-                    }
-                }
-
                 // HeatTreatment columns (join by heatTreatId)
-                if (datasetColumnConfig.heatTreatment.enabled) {
-                    var ht = heatTreatments.find(function(h) { return h.id === product.heatTreatId; });
-                    if (ht) {
-                        Object.keys(datasetColumnConfig.heatTreatment.columns).forEach(function(col) {
-                            if (datasetColumnConfig.heatTreatment.columns[col] && ht[col] !== undefined) {
-                                row['ht_' + col] = ht[col];
-                            }
-                        });
-                    }
+                var ht = heatTreatments.find(function(h) { return h.id === product.heatTreatId; });
+                if (ht) {
+                    getLayerColumns('heatTreatment').forEach(function(col) {
+                        if (isColumnEnabled('heatTreatment', col) && ht[col] !== undefined) {
+                            row['ht_' + col] = ht[col];
+                        }
+                    });
                 }
 
-                // TestPiece & AnalysisSample (aggregate by productId)
+                // TestPiece columns (aggregate)
                 var productTPs = testPieces.filter(function(tp) { return tp.productId === product.id; });
+                if (productTPs.length > 0) {
+                    getLayerColumns('testPiece').forEach(function(col) {
+                        if (isColumnEnabled('testPiece', col)) {
+                            var values = productTPs.map(function(tp) { return tp[col]; }).filter(function(v) { return v !== undefined; });
+                            if (values.length > 0) {
+                                if (typeof values[0] === 'number') {
+                                    var avg = values.reduce(function(a, b) { return a + b; }, 0) / values.length;
+                                    row['tp_avg_' + col] = Math.round(avg * 100) / 100;
+                                } else {
+                                    row['tp_' + col] = values.join(', ');
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // AnalysisSample columns (aggregate)
                 var productAnalysis = analysisSamples.filter(function(as) {
                     return as.productId === product.id || productTPs.some(function(tp) { return tp.id === as.testPieceId; });
                 });
-
-                // Aggregate numeric values from AnalysisSample
-                if (datasetColumnConfig.analysisSample.enabled && productAnalysis.length > 0) {
-                    Object.keys(datasetColumnConfig.analysisSample.columns).forEach(function(col) {
-                        if (datasetColumnConfig.analysisSample.columns[col]) {
-                            var values = productAnalysis.map(function(as) { return as[col]; }).filter(function(v) { return typeof v === 'number'; });
+                if (productAnalysis.length > 0) {
+                    getLayerColumns('analysisSample').forEach(function(col) {
+                        if (isColumnEnabled('analysisSample', col)) {
+                            var values = productAnalysis.map(function(as) { return as[col]; }).filter(function(v) { return v !== undefined; });
                             if (values.length > 0) {
-                                var avg = values.reduce(function(a, b) { return a + b; }, 0) / values.length;
-                                row['avg_' + col] = Math.round(avg * 100) / 100;
+                                if (typeof values[0] === 'number') {
+                                    var avg = values.reduce(function(a, b) { return a + b; }, 0) / values.length;
+                                    row['as_avg_' + col] = Math.round(avg * 100) / 100;
+                                } else {
+                                    row['as_' + col] = values.join(', ');
+                                }
                             }
                         }
                     });

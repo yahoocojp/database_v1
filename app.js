@@ -119,6 +119,9 @@ function buildGraphData() {
     });
 
     // Product nodes + edges
+    // Track Material→HeatTreatment edges to avoid duplicates
+    var matHeatEdges = {};
+
     sampleData.products.forEach(function(p) {
         nodes.push({
             id: p.id,
@@ -129,8 +132,23 @@ function buildGraphData() {
             properties: p
         });
 
-        edges.push({ from: p.materialId, to: p.id });
-        edges.push({ from: p.heatTreatId, to: p.id });
+        // Edge logic: Material → HeatTreatment → Product (when both exist)
+        if (p.materialId && p.heatTreatId) {
+            // Material → HeatTreatment (only add once per pair)
+            var matHeatKey = p.materialId + '-' + p.heatTreatId;
+            if (!matHeatEdges[matHeatKey]) {
+                edges.push({ from: p.materialId, to: p.heatTreatId });
+                matHeatEdges[matHeatKey] = true;
+            }
+            // HeatTreatment → Product
+            edges.push({ from: p.heatTreatId, to: p.id });
+        } else if (p.materialId) {
+            // Only Material → Product
+            edges.push({ from: p.materialId, to: p.id });
+        } else if (p.heatTreatId) {
+            // Only HeatTreatment → Product
+            edges.push({ from: p.heatTreatId, to: p.id });
+        }
     });
 
     // Test piece nodes + edges
