@@ -1,0 +1,15 @@
+# Databricks Apps 設定ファイル
+# R&D実験管理システム - Phase 1A (サンプルデータ版)
+
+command:
+  - "node"
+  - "app.js"
+
+# Phase 1B以降でUC接続する場合は以下を有効化
+# env:
+#   - name: DATABRICKS_SERVER_HOSTNAME
+#     value: "YOUR_WORKSPACE.cloud.databricks.com"
+#   - name: DATABRICKS_HTTP_PATH
+#     value: "/sql/1.0/warehouses/YOUR_WAREHOUSE_ID"
+#   - name: DATABRICKS_TOKEN
+#     valueFrom: "secret"
