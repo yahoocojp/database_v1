@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code
+.claude/
+
+# Environment
+.env
+.env.local
+*.local
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python ML Service
+ml_service/models/*.joblib
+ml_service/models/*.pkl
+ml_service/uploads/*
+!ml_service/uploads/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/

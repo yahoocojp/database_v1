@@ -1,0 +1,14 @@
+product_id,product_createdAt,product_note,material_steelGrade,material_maker,material_note,ht_quenchMethod,ht_quenchTemp,ht_quenchTime,ht_temperTemp,ht_temperTime,ht_note,tp_stamp,tp_note,as_avg_hardness,as_note
+Z001,2025/11/01,,SCM435,A Steel,,FH,850,3600,400,120,,A-001, A-002,, ,52.3,
+Z002,2025/11/05,,SCM435,A Steel,,FH,880,3600,450,120,,A-003,,54.1,
+Z003,2025/11/08,IH,SCM435,A Steel,,IH,950,30,400,60,,A-004, A-005,, ,,
+Z004,2025/11/10,SharedHT,SCM440,B Steel,,FH,850,3600,400,120,,B-001, B-002,, ,51.8,
+Z005,2025/11/12,,SCM440,B Steel,,IH,980,25,380,30,IH Temper,B-003,,,
+Z006,2025/11/15,,SNCM439,A Steel,,FH,860,4200,500,180,High Temp,C-001, C-002,, ,48.5,High Temp
+Z007,2025/11/18,,SNCM439,A Steel,,FH,850,3600,350,90,Low Temp,C-003,Micro,55.2,
+Z008,2025/11/20,Plate,SCM435,C Metal,Test,IH,920,45,420,100,,D-001,,,
+Z009,2025/11/25,,SCM440,A Steel,,FH,870,3000,480,150,,E-001,,,
+Z010,2025/12/01,Add,SCM435,A Steel,,IH,980,25,380,30,IH Temper,A-010, A-011,, ,,
+Z011,2025/12/05,SharedHT,SNCM439,A Steel,,FH,850,3600,400,120,,,,,
+Z012,2025/12/08,SharedHT,SCM435,C Metal,Test,FH,880,3600,450,120,,,,,
+Z013,2025/12/10,SharedHT,SCM440,A Steel,,FH,850,3600,400,120,,,,,

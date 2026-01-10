@@ -1,11 +1,12 @@
 # R&D実験管理システム
 
-## Phase 1A - サンプルデータ版 + ML App統合
+## Phase 1A - サンプルデータ版 + ML統合（完全版）
 
 ### 概要
 
-材料R&D実験データの可視化・管理・ML連携システム。
-サンプルデータを使用したUI検証版で、Database AppとML Appの2つのインターフェースを提供。
+材料R&D実験データの可視化・管理・機械学習統合システム。
+サンプルデータを使用したUI検証版で、**Database App、ML App、ML Trainingの3つのインターフェース**を提供。
+**WebSocket対応のリアルタイムML学習機能を実装。**
 
 ---
 
@@ -32,9 +33,29 @@
 | 統計自動計算 | ✅ 完成 | min/max/mean/median（正確な中央値計算） |
 | CSV保存 | ✅ 完成 | BOM付きUTF-8（Excel対応） |
 | AIチャット統合 | ✅ 完成 | データセット選択→AIに通知 |
-| ラン管理 | 🎨 モックアップ | モデル学習・予測タスク管理 |
-| モデル管理 | 🔜 実装予定 | - |
-| 分析ビュー | 🔜 実装予定 | - |
+
+### ML Training (`/ml-training.html`) **NEW!**
+| 機能 | 状態 | 説明 |
+|------|------|------|
+| モデル学習UI | ✅ 完成 | 4ステップウィザード形式 |
+| リアルタイム進捗表示 | ✅ 完成 | WebSocketでプログレスバー＋ログ表示 |
+| 複数モデル対応 | ✅ 完成 | CatBoost, LightGBM, ニューラルネットワーク |
+| ハイパーパラメータ最適化 | ✅ 完成 | Optuna TPE |
+| クロスバリデーション | ✅ 完成 | KFold / LeaveOneGroupOut |
+| MLflow統合 | ✅ 完成 | モデル・結果自動保存 |
+| SHAP計算 | ✅ 完成 | 特徴量寄与度分析 |
+| 予測UI | 🔜 Phase 1B | - |
+| 最適化UI | 🔜 Phase 1B | - |
+| SHAP可視化 | 🔜 Phase 1B | - |
+
+### Python MLサービス（バックエンド）
+| 機能 | 状態 | 説明 |
+|------|------|------|
+| Flask API | ✅ 完成 | RESTful API |
+| WebSocket Server | ✅ 完成 | リアルタイム通知 |
+| 学習エンジン | ✅ 完成 | PyCaret + scikit-learn |
+| 予測エンジン | ✅ 完成 | MLflowモデルロード |
+| 最適化エンジン | ✅ 完成 | Optuna多目的最適化 |
 
 ---
 
@@ -66,16 +87,15 @@ Database Appで列を選択してML Appに送信すると、5層データが以�
 
 ## ローカル実行
 
+### クイックスタート
+
+**ステップ1: Node.jsサーバー起動**
 ```bash
 # 依存パッケージをインストール
 npm install
 
 # サーバー起動
 npm start
-
-# ブラウザでアクセス
-# Database App: http://localhost:8000
-# ML App:       http://localhost:8000/ml-app.html
 ```
 
 起動すると以下が表示されます：
@@ -85,8 +105,32 @@ R&D Experiment Manager (Sample Data Mode)
 Server running on port 8000
 Started at: 2026-01-09T...
 Data: 5 materials, 15 test pieces
+WebSocket: Enabled
+ML Service: http://localhost:5000
 ========================================
 ```
+
+**ステップ2: Python MLサービス起動（ML機能を使う場合）**
+```bash
+cd ml_service
+
+# 仮想環境作成（推奨）
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# 依存関係インストール
+pip install -r requirements.txt
+
+# サーバー起動
+python app.py
+```
+
+**ステップ3: ブラウザでアクセス**
+- **Database App**: http://localhost:8000
+- **ML App**: http://localhost:8000/ml-app.html
+- **ML Training**: http://localhost:8000/ml-training.html ⭐ NEW!
+
+詳細なセットアップ手順は [ML_SETUP_GUIDE.md](ML_SETUP_GUIDE.md) を参照してください。
 
 ---
 
@@ -103,18 +147,48 @@ Data: 5 materials, 15 test pieces
 
 ```
 database_v1/
-├── app.js                  # Expressサーバー + サンプルデータAPI
+├── app.js                  # Expressサーバー + サンプルデータAPI + WebSocket
 ├── app.yaml                # Databricks Apps設定
 ├── package.json            # Node.js依存関係
 ├── README.md               # このファイル
-├── archive/                # 古いバージョン（削除済み）
-│   ├── ml-app-ui-mockup.html
-│   ├── ml-app-with-agent.html
-│   └── index2.html
+├── lib/                    # 共通JavaScriptライブラリ
+│   ├── toast.js            # トースト通知
+│   ├── error-handler.js    # エラーハンドリング
+│   ├── debug-manager.js    # デバッグ管理
+│   ├── websocket-manager.js # WebSocket接続管理
+│   ├── router.js           # クライアントサイドルーティング
+│   └── theme-manager.js    # テーマ切替（ダーク/ライト）
+├── ml_service/             # Python MLバックエンド
+│   ├── app.py              # Flask API + WebSocket
+│   ├── requirements.txt    # Python依存関係
+│   └── ...
 └── public/
-    ├── index.html          # Database App（メインUI）
-    └── ml-app.html         # ML App（データセット管理・学習）
+    ├── index.html          # Database App（HTML構造のみ - リファクタリング済）
+    ├── ml-app.html         # ML App（HTML構造のみ - リファクタリング済）
+    ├── ml-training.html    # ML Training（HTML構造のみ - リファクタリング済）
+    ├── css/
+    │   ├── common.css      # 共通スタイル（CSS変数、ボタン、フォーム等）
+    │   ├── database-app.css # Database App スタイル
+    │   ├── ml-app.css      # ML App スタイル
+    │   └── ml-training.css # ML Training スタイル
+    └── js/
+        ├── database-app.js # Database App ロジック
+        ├── ml-app.js       # ML App ロジック
+        └── ml-training.js  # ML Training ロジック
 ```
+
+### フロントエンドリファクタリング（2026-01-10）
+
+全HTMLファイルのCSS/JSを外部ファイルに分離し、保守性を向上しました：
+
+| ページ | HTML | CSS | JS |
+|--------|------|-----|-----|
+| Database App | 277行 | 219行 | 1,559行 |
+| ML App | 1,043行 | 2,097行 | 2,564行 |
+| ML Training | 179行 | 396行 | 外部参照 |
+| 共通CSS | - | 260行 | - |
+
+変更前は各HTMLに全コードが埋め込まれていました（例: ML Appは5,703行の単一ファイル）。
 
 ---
 
@@ -271,5 +345,6 @@ Materials R&D Team
 
 ## 更新履歴
 
+- **2026-01-10**: ML Appリファクタリング（CSS/JS外部ファイル分離）、streamlit_app機能移植（Y-Yプロット、CV RMSE、SHAP、パレートプロット等）
 - **2026-01-09**: Dataset Export機能追加、ML App統合、CSV保存改善
 - **2025-12**: Phase 1A初回リリース
