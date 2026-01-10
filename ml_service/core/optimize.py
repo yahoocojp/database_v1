@@ -11,6 +11,8 @@ from optuna.samplers import TPESampler
 import os
 from datetime import datetime
 
+import pickle
+
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import *
@@ -50,16 +52,52 @@ def optimize_model(mlflow_id, param_configs, target_param_configs, n_trials=100,
 
         # モデルロード
         loaded_models = []
-        model_idx = 0
 
-        while True:
-            try:
-                model_uri = f'runs:/{mlflow_id}/trained_model_{model_idx}'
-                loaded_model = mlflow.pyfunc.load_model(model_uri)
-                loaded_models.append(loaded_model)
-                model_idx += 1
-            except Exception:
-                break
+        # ローカル環境ではファイルから直接読み込む
+        if not is_databricks_environment():
+            result_base = f"{get_result_path()}"
+
+            # mlflow_idからモデルを検索
+            model_path = None
+            for run_dir in os.listdir(result_base):
+                run_path = os.path.join(result_base, run_dir)
+                if os.path.isdir(run_path):
+                    mlflow_dir = os.path.join(run_path, mlflow_id)
+                    if os.path.exists(mlflow_dir):
+                        model_path = run_path
+                        break
+                    models_dir = os.path.join(run_path, "models")
+                    if os.path.isdir(models_dir):
+                        for m in os.listdir(models_dir):
+                            pkl_path = os.path.join(models_dir, m, "artifacts", "model.pkl")
+                            if os.path.exists(pkl_path):
+                                model_path = run_path
+                                break
+                    if model_path:
+                        break
+
+            if not model_path:
+                raise ValueError(f"No model found for MLflow ID: {mlflow_id}")
+
+            # モデルをロード
+            models_dir = os.path.join(model_path, "models")
+            for model_name in sorted(os.listdir(models_dir)):
+                pkl_path = os.path.join(models_dir, model_name, "artifacts", "model.pkl")
+                if os.path.exists(pkl_path):
+                    with open(pkl_path, 'rb') as f:
+                        model = pickle.load(f)
+                    loaded_models.append(model)
+        else:
+            # Databricks環境ではMLflowから読み込む
+            model_idx = 0
+            while True:
+                try:
+                    model_uri = f'runs:/{mlflow_id}/trained_model_{model_idx}'
+                    loaded_model = mlflow.pyfunc.load_model(model_uri)
+                    loaded_models.append(loaded_model)
+                    model_idx += 1
+                except Exception:
+                    break
 
         if len(loaded_models) == 0:
             raise ValueError(f"No models found for MLflow run: {mlflow_id}")
@@ -75,14 +113,21 @@ def optimize_model(mlflow_id, param_configs, target_param_configs, n_trials=100,
             params = {}
             for config in param_configs:
                 name = config["name"]
-                param_type = config["type"]
+                param_type = config.get("type", "float")
 
-                if param_type == "整数":
-                    params[name] = trial.suggest_int(name, int(config["low"]), int(config["high"]))
-                elif param_type == "小数":
-                    params[name] = trial.suggest_float(name, float(config["low"]), float(config["high"]))
-                elif param_type == "カテゴリ":
-                    params[name] = trial.suggest_categorical(name, config["choices"])
+                # 複数の形式に対応 (min/max or low/high)
+                low = config.get("low", config.get("min", 0))
+                high = config.get("high", config.get("max", 100))
+
+                if param_type in ["整数", "int", "integer"]:
+                    params[name] = trial.suggest_int(name, int(low), int(high))
+                elif param_type in ["小数", "float", "number"]:
+                    params[name] = trial.suggest_float(name, float(low), float(high))
+                elif param_type in ["カテゴリ", "categorical", "category"]:
+                    params[name] = trial.suggest_categorical(name, config.get("choices", []))
+                else:
+                    # デフォルトはfloat
+                    params[name] = trial.suggest_float(name, float(low), float(high))
 
             # 予測実行
             input_df = pd.DataFrame([params])
@@ -94,9 +139,12 @@ def optimize_model(mlflow_id, param_configs, target_param_configs, n_trials=100,
 
                 pred = loaded_models[i].predict(input_df)[0]
 
-                if target_config["type"] == "目標値":
+                target_type = target_config.get("type", target_config.get("direction", "maximize"))
+                target_value = target_config.get("value", target_config.get("target"))
+
+                if target_type in ["目標値", "target"] and target_value is not None:
                     # 目標値との差を最小化
-                    score = abs(pred - target_config["value"])
+                    score = abs(pred - float(target_value))
                 else:
                     # 最大化/最小化
                     score = pred
@@ -108,7 +156,8 @@ def optimize_model(mlflow_id, param_configs, target_param_configs, n_trials=100,
         # 最適化方向の設定
         directions = []
         for target_config in target_param_configs:
-            if target_config["type"] == "最大化":
+            target_type = target_config.get("type", target_config.get("direction", "maximize"))
+            if target_type in ["最大化", "maximize"]:
                 directions.append("maximize")
             else:
                 # 最小化 or 目標値
@@ -141,7 +190,13 @@ def optimize_model(mlflow_id, param_configs, target_param_configs, n_trials=100,
         # 結果をDataFrameに変換
         optimization_result = study.trials_dataframe()
 
+        # Timedelta型をfloat（秒）に変換
+        for col in optimization_result.columns:
+            if optimization_result[col].dtype == 'timedelta64[ns]':
+                optimization_result[col] = optimization_result[col].dt.total_seconds()
+
         # 結果保存
+        result_path = None
         if run_id:
             result_path = f"{get_result_path()}/{run_id}"
             os.makedirs(result_path, exist_ok=True)
@@ -155,20 +210,20 @@ def optimize_model(mlflow_id, param_configs, target_param_configs, n_trials=100,
         if len(directions) == 1:
             best_trial = study.best_trial
             best_params = best_trial.params
-            best_value = best_trial.value
+            best_value = float(best_trial.value) if best_trial.value is not None else None
         else:
             # 多目的最適化: パレート最適解を返す
             best_trials = study.best_trials
             best_params = [t.params for t in best_trials[:5]]  # 上位5件
-            best_value = [t.values for t in best_trials[:5]]
+            best_value = [[float(v) for v in t.values] for t in best_trials[:5]]
 
         return {
             "num_trials": n_trials,
             "num_objectives": len(target_param_configs),
             "best_params": best_params,
             "best_value": best_value,
-            "result_path": result_path if run_id else None,
-            "optimization_result": optimization_result.to_dict(orient='records')
+            "result_path": result_path,
+            "optimization_result": optimization_result.head(20).to_dict(orient='records')  # 上位20件のみ
         }
 
     except Exception as e:

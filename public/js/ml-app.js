@@ -1406,8 +1406,34 @@ function handleTrainingError(errorMessage) {
     document.getElementById('btnStartTraining').innerHTML = '<i class="fas fa-play"></i> 学習開始';
     document.getElementById('btnPrevStep').style.display = 'block';
 
-    showToast('学習エラー: ' + errorMessage, 'error');
-    addMessage('エラーが発生しました: ' + errorMessage, 'agent');
+    // エラーメッセージを分かりやすく変換
+    var userMessage = errorMessage;
+    if (errorMessage.includes('Connection refused') || errorMessage.includes('ECONNREFUSED')) {
+        userMessage = 'ML Serviceに接続できません。サービスが起動しているか確認してください。';
+    } else if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
+        userMessage = '処理がタイムアウトしました。データサイズを小さくするか、再試行してください。';
+    } else if (errorMessage.includes('Missing required')) {
+        userMessage = '必須パラメータが不足しています。設定を確認してください。';
+    } else if (errorMessage.includes('Non-numeric')) {
+        userMessage = '数値以外のカラムが選択されています。数値カラムのみを選択してください。';
+    }
+
+    showToast('学習エラー: ' + userMessage, 'error');
+    addMessage('エラーが発生しました: ' + userMessage + '\n\n詳細: ' + errorMessage, 'agent');
+
+    // エラー発生をラン履歴に記録
+    var errorRun = {
+        id: 'error-' + Date.now(),
+        name: 'エラー発生',
+        dataset: trainingSelectedDataset ? trainingSelectedDataset.name : 'unknown',
+        features: [],
+        target: '',
+        algorithm: '',
+        startTime: new Date().toISOString(),
+        status: 'error',
+        error: userMessage
+    };
+    addRun(errorRun);
 }
 
 // Mock training (fallback)
@@ -2877,27 +2903,38 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Check ML API status
     checkMLServiceHealth().then(function(connected) {
+        // Add status indicator
+        var statusEl = document.createElement('div');
+        statusEl.id = 'mlApiStatus';
+
         if (connected) {
             console.log('[ML App] Connected to ML Service');
-            // Add status indicator
-            var statusEl = document.createElement('div');
-            statusEl.id = 'mlApiStatus';
             statusEl.innerHTML = '<i class="fas fa-circle" style="color: #10b981; font-size: 8px;"></i> ML API';
-            statusEl.style.cssText = 'position: fixed; top: 10px; right: 440px; font-size: 12px; color: #fff; background: rgba(16,185,129,0.9); padding: 6px 12px; border-radius: 6px; z-index: 50; box-shadow: 0 2px 8px rgba(0,0,0,0.2); transition: right 0.3s;';
-            document.body.appendChild(statusEl);
+            statusEl.style.cssText = 'position: fixed; top: 10px; right: 440px; font-size: 12px; color: #fff; background: rgba(16,185,129,0.9); padding: 6px 12px; border-radius: 6px; z-index: 50; box-shadow: 0 2px 8px rgba(0,0,0,0.2); transition: right 0.3s; cursor: pointer;';
+            statusEl.title = 'ML Service: 接続中';
+        } else {
+            console.log('[ML App] ML Service not available - using mock mode');
+            statusEl.innerHTML = '<i class="fas fa-circle" style="color: #ef4444; font-size: 8px;"></i> ML API (オフライン)';
+            statusEl.style.cssText = 'position: fixed; top: 10px; right: 440px; font-size: 12px; color: #fff; background: rgba(239,68,68,0.9); padding: 6px 12px; border-radius: 6px; z-index: 50; box-shadow: 0 2px 8px rgba(0,0,0,0.2); transition: right 0.3s; cursor: pointer;';
+            statusEl.title = 'ML Service: 未接続 - モックモードで動作中';
+            statusEl.onclick = function() {
+                showToast('ML Serviceに接続できません。学習・予測はモックモードで実行されます。', 'warning');
+            };
+        }
 
-            // Adjust position when chat panel is collapsed/expanded
-            var chatPanel = document.querySelector('.chat-panel');
-            if (chatPanel) {
-                var observer = new MutationObserver(function() {
-                    var isCollapsed = chatPanel.classList.contains('collapsed');
-                    statusEl.style.right = isCollapsed ? '80px' : '440px';
-                });
-                observer.observe(chatPanel, { attributes: true, attributeFilter: ['class'] });
-                // Initial check
-                if (chatPanel.classList.contains('collapsed')) {
-                    statusEl.style.right = '80px';
-                }
+        document.body.appendChild(statusEl);
+
+        // Adjust position when chat panel is collapsed/expanded
+        var chatPanel = document.querySelector('.chat-panel');
+        if (chatPanel) {
+            var observer = new MutationObserver(function() {
+                var isCollapsed = chatPanel.classList.contains('collapsed');
+                statusEl.style.right = isCollapsed ? '80px' : '440px';
+            });
+            observer.observe(chatPanel, { attributes: true, attributeFilter: ['class'] });
+            // Initial check
+            if (chatPanel.classList.contains('collapsed')) {
+                statusEl.style.right = '80px';
             }
         }
     });
