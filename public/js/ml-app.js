@@ -1719,15 +1719,18 @@ function getModels() {
 
 function saveModel(runData) {
     var models = getModels();
+    // Handle both formats: runData.metrics.r2 or runData.r2
+    var r2Value = runData.metrics ? runData.metrics.r2 : runData.r2;
     var model = {
-        id: 'model_' + Date.now(),
-        runId: runData.id,
-        name: runData.algorithm + ' - ' + runData.target,
+        id: runData.id || ('model_' + Date.now()),
+        runId: runData.runId || runData.id,
+        mlflowRunId: runData.mlflowRunId,
+        name: runData.name || (runData.algorithm + ' - ' + runData.target),
         algorithm: runData.algorithm,
         dataset: runData.dataset,
         target: runData.target,
         features: runData.features,
-        r2: runData.metrics.r2,
+        r2: r2Value,
         createdAt: runData.createdAt
     };
     models.unshift(model);
@@ -2815,8 +2818,8 @@ function showOptimizeResult(finalScore, trials) {
     document.getElementById('optimizeProgress').style.display = 'none';
     document.getElementById('optimizeResult').style.display = 'block';
 
-    var originalScore = optimizeSelectedModel.r2;
-    var improvement = ((finalScore - originalScore) / originalScore * 100).toFixed(1);
+    var originalScore = (optimizeSelectedModel && optimizeSelectedModel.r2) ? optimizeSelectedModel.r2 : 0;
+    var improvement = originalScore > 0 ? ((finalScore - originalScore) / originalScore * 100).toFixed(1) : '0';
 
     document.getElementById('optResultR2').textContent = finalScore.toFixed(4);
     document.getElementById('optResultImprove').textContent = '+' + improvement + '%';
@@ -2846,14 +2849,20 @@ function showOptimizeResult(finalScore, trials) {
     // Draw trials table
     drawOptimizeTrialsTable(trials, finalScore, bestParams);
 
-    // Save optimized model
+    // Save optimized model (only if model was selected)
+    var modelName = optimizeSelectedModel ? optimizeSelectedModel.name : 'unknown';
+    var modelAlgo = optimizeSelectedModel ? optimizeSelectedModel.algorithm : 'unknown';
+    var modelDataset = optimizeSelectedModel ? optimizeSelectedModel.dataset : 'unknown';
+    var modelTarget = optimizeSelectedModel ? optimizeSelectedModel.target : '';
+    var modelFeatures = optimizeSelectedModel ? optimizeSelectedModel.features : [];
+
     var newModel = {
         id: 'model_' + Date.now(),
-        name: optimizeSelectedModel.name + '_opt',
-        algorithm: optimizeSelectedModel.algorithm + ' (Optimized)',
-        dataset: optimizeSelectedModel.dataset,
-        target: optimizeSelectedModel.target,
-        features: optimizeSelectedModel.features,
+        name: modelName + '_opt',
+        algorithm: modelAlgo + ' (Optimized)',
+        dataset: modelDataset,
+        target: modelTarget,
+        features: modelFeatures,
         r2: finalScore,
         bestParams: bestParams,
         runId: 'run_' + Date.now(),
@@ -2864,10 +2873,12 @@ function showOptimizeResult(finalScore, trials) {
     // Save optimization run with history
     var run = {
         id: 'run_' + Date.now(),
-        name: 'optimize_' + new Date().toISOString().slice(0,10).replace(/-/g, ''),
+        name: 'optimize_' + new Date().toISOString().slice(0,10).replace(/-/g, '') + '_' + String(Math.floor(Math.random() * 1000)).padStart(3, '0'),
         type: 'optimize',
         algorithm: document.getElementById('optimizeAlgorithm').value.toUpperCase(),
-        dataset: optimizeSelectedModel.dataset,
+        dataset: modelDataset,
+        target: modelTarget,
+        features: modelFeatures,
         status: 'complete',
         r2: finalScore,
         originalR2: originalScore,
