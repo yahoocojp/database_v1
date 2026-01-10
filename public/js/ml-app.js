@@ -506,20 +506,18 @@ function switchView(viewName) {
         document.getElementById('navModels').classList.add('active');
         openTrainingModal();
     } else if (viewName === 'analysis') {
-        // 分析機能は開発中
-        document.getElementById('runsView').style.display = 'block';
-        document.getElementById('navRuns').classList.add('active');
-        showToast('分析機能は Phase 1B で実装予定です', 'info');
+        // 分析機能は開発中 - ナビゲーションをアクティブにしてメッセージ表示
+        document.getElementById('navAnalysis').classList.add('active');
+        showToast('分析機能は Phase 1B で実装予定です', 'warning');
+        // 遷移しない
     } else if (viewName === 'settings') {
         // 設定機能は開発中
-        document.getElementById('runsView').style.display = 'block';
-        document.getElementById('navRuns').classList.add('active');
-        showToast('設定機能は Phase 1B で実装予定です', 'info');
+        showToast('設定機能は Phase 1B で実装予定です', 'warning');
+        // 遷移しない
     } else {
         // For other views, show runs as default
         document.getElementById('runsView').style.display = 'block';
         document.getElementById('navRuns').classList.add('active');
-        showToast('この機能は開発中です', 'info');
     }
 }
 
@@ -2640,8 +2638,8 @@ function startOptimize() {
                 varConfigs.push({
                     name: feat,
                     type: typeEl.value,
-                    low: parseFloat(lowEl.value) || 0,
-                    high: parseFloat(highEl.value) || 100
+                    min: parseFloat(lowEl.value) || 0,
+                    max: parseFloat(highEl.value) || 100
                 });
             }
         });
@@ -2659,17 +2657,139 @@ function startOptimize() {
     var bestScore = document.getElementById('optimizeBestScore');
 
     progressLog.innerHTML = '';
-    var currentBest = optimizeSelectedModel.r2;
+    var currentBest = optimizeSelectedModel.r2 || 0;
+
+    // Try ML API first
+    if (mlApiConnected && optimizeSelectedModel.mlflowRunId) {
+        startOptimizeWithAPI(varConfigs, trials, objective, progressFill, progressPercent, progressLog, bestScore);
+    } else {
+        // Fallback to mock
+        startOptimizeMock(trials, progressFill, progressPercent, progressLog, bestScore, currentBest);
+    }
+}
+
+// ML API optimization
+async function startOptimizeWithAPI(varConfigs, trials, objective, progressFill, progressPercent, progressLog, bestScore) {
+    try {
+        progressLog.innerHTML += '<div>[INFO] ML APIで最適化を開始...</div>';
+
+        var targetConfig = [{
+            direction: objective === 'maximize' ? 'maximize' : 'minimize'
+        }];
+
+        var requestBody = {
+            mlflow_id: optimizeSelectedModel.mlflowRunId,
+            param_configs: varConfigs,
+            target_param_configs: targetConfig,
+            n_trials: trials
+        };
+
+        var response = await fetch('/api/ml/optimize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+            throw new Error('Optimize request failed');
+        }
+
+        var data = await response.json();
+        var runId = data.run_id;
+
+        progressLog.innerHTML += '<div>[INFO] 最適化ジョブ開始: ' + runId + '</div>';
+
+        // Poll for status
+        var pollInterval = setInterval(async function() {
+            try {
+                var statusRes = await fetch('/api/ml/status/' + runId);
+                var statusData = await statusRes.json();
+
+                if (statusData.status === 'completed') {
+                    clearInterval(pollInterval);
+                    progressFill.style.width = '100%';
+                    progressPercent.textContent = '100%';
+
+                    var result = statusData.result || {};
+                    var bestValue = result.best_value || 0;
+                    bestScore.textContent = bestValue.toFixed(4);
+
+                    progressLog.innerHTML += '<div>[完了] 最適化完了 - ベストスコア: ' + bestValue.toFixed(4) + '</div>';
+
+                    showOptimizeResultFromAPI(result, trials);
+                } else if (statusData.status === 'failed') {
+                    clearInterval(pollInterval);
+                    progressLog.innerHTML += '<div style="color:red;">[エラー] ' + (statusData.error || 'Unknown error') + '</div>';
+                    showToast('最適化エラー: ' + (statusData.error || 'Unknown'), 'error');
+                }
+            } catch (e) {
+                progressLog.innerHTML += '<div>[WARN] ステータス取得失敗</div>';
+            }
+        }, 2000);
+
+    } catch (error) {
+        progressLog.innerHTML += '<div style="color:orange;">[WARN] ML API接続失敗、モックモードで実行</div>';
+        startOptimizeMock(trials, progressFill, progressPercent, progressLog, bestScore, optimizeSelectedModel.r2 || 0);
+    }
+}
+
+// Show result from API
+function showOptimizeResultFromAPI(result, trials) {
+    document.getElementById('optimizeProgress').style.display = 'none';
+    document.getElementById('optimizeResult').style.display = 'block';
+
+    var bestValue = result.best_value || 0;
+    var bestParams = result.best_params || {};
+    var originalScore = optimizeSelectedModel.r2 || 0;
+    var improvement = originalScore > 0 ? ((bestValue - originalScore) / originalScore * 100).toFixed(1) : '0';
+
+    document.getElementById('optResultR2').textContent = bestValue.toFixed(4);
+    document.getElementById('optResultImprove').textContent = (improvement >= 0 ? '+' : '') + improvement + '%';
+    document.getElementById('optResultTrials').textContent = result.num_trials || trials;
+
+    var paramsHtml = Object.entries(bestParams).map(function(entry) {
+        var val = typeof entry[1] === 'number' ? entry[1].toFixed(4) : entry[1];
+        return '<div><span style="color: #6366f1;">' + entry[0] + '</span>: ' + val + '</div>';
+    }).join('');
+    document.getElementById('optResultParams').innerHTML = paramsHtml;
+
+    drawOptimizeHistoryChart(result.num_trials || trials, originalScore, bestValue);
+    drawOptimizeTrialsTable(result.num_trials || trials, bestValue, bestParams);
+
+    // Save run
+    var run = {
+        id: 'run_' + Date.now(),
+        name: 'optimize_' + new Date().toISOString().slice(0,10).replace(/-/g, '') + '_' + String(Math.floor(Math.random() * 1000)).padStart(3, '0'),
+        type: 'optimize',
+        algorithm: document.getElementById('optimizeAlgorithm').value.toUpperCase(),
+        dataset: optimizeSelectedModel.dataset,
+        target: optimizeSelectedModel.target,
+        features: optimizeSelectedModel.features,
+        status: 'complete',
+        bestValue: bestValue,
+        originalR2: originalScore,
+        improvement: improvement,
+        trials: result.num_trials || trials,
+        bestParams: bestParams,
+        mlflowRunId: optimizeSelectedModel.mlflowRunId,
+        createdAt: new Date().toISOString()
+    };
+    saveRun(run);
+    renderRunsTable();
+
+    showToast('最適化が完了しました！', 'success');
+}
+
+// Mock optimization
+function startOptimizeMock(trials, progressFill, progressPercent, progressLog, bestScore, currentBest) {
     var trialCount = 0;
 
-    // Simulate optimization
     var interval = setInterval(function() {
         trialCount++;
         var progress = (trialCount / trials * 100).toFixed(0);
         progressFill.style.width = progress + '%';
         progressPercent.textContent = progress + '%';
 
-        // Simulate improvement
         var improvement = Math.random() * 0.01;
         if (Math.random() > 0.7) {
             currentBest = Math.min(0.999, currentBest + improvement);
