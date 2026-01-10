@@ -1334,12 +1334,14 @@ function handleTrainingComplete(data) {
         if (cb.value !== targetCol) features.push(cb.value);
     });
 
-    // Extract metrics from API response
-    var targets = data.targets || {};
-    var targetMetrics = targets[targetCol] || {};
-    var r2 = (targetMetrics.r2 || 0.85).toFixed(3);
-    var rmse = (targetMetrics.rmse || 0.1).toFixed(4);
-    var mae = (targetMetrics.mae || 0.08).toFixed(4);
+    // Extract metrics from API response (handle nested result structure)
+    var result = data.result || data;
+    var targets = result.targets || data.targets || {};
+    var targetMetrics = targets[targetCol] || Object.values(targets)[0] || {};
+    var r2 = (targetMetrics.r2 !== undefined ? targetMetrics.r2 : 0.85).toFixed(3);
+    var rmse = (targetMetrics.rmse !== undefined ? targetMetrics.rmse : 0.1).toFixed(4);
+    var mae = (targetMetrics.mae !== undefined ? targetMetrics.mae : 0.08).toFixed(4);
+    var mlflowRunId = result.mlflow_run_id || data.mlflow_run_id;
 
     // Update UI
     document.getElementById('trainingProgress').style.display = 'none';
@@ -1377,7 +1379,7 @@ function handleTrainingComplete(data) {
         features: features,
         cvGroup: cvGroup,
         cvFold: cvFold,
-        mlflowRunId: data.mlflow_run_id,
+        mlflowRunId: mlflowRunId,
         metrics: { r2: parseFloat(r2), rmse: parseFloat(rmse), mae: parseFloat(mae) },
         featureImportance: shapData,
         cvData: cvData,
@@ -1394,7 +1396,7 @@ function handleTrainingComplete(data) {
         '• アルゴリズム: ' + document.getElementById('summaryAlgorithm').textContent + '<br>' +
         '• R² Score: ' + r2 + '<br>' +
         '• RMSE: ' + rmse + '<br>' +
-        '• MLflow Run ID: ' + (data.mlflow_run_id || 'N/A'),
+        '• MLflow Run ID: ' + (mlflowRunId || 'N/A'),
         'agent'
     );
 }
