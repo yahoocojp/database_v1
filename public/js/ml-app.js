@@ -2883,8 +2883,22 @@ document.addEventListener('DOMContentLoaded', function() {
             var statusEl = document.createElement('div');
             statusEl.id = 'mlApiStatus';
             statusEl.innerHTML = '<i class="fas fa-circle" style="color: #10b981; font-size: 8px;"></i> ML API';
-            statusEl.style.cssText = 'position: fixed; bottom: 10px; left: 10px; font-size: 11px; color: #94a3b8; background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 4px;';
+            statusEl.style.cssText = 'position: fixed; top: 10px; right: 440px; font-size: 12px; color: #fff; background: rgba(16,185,129,0.9); padding: 6px 12px; border-radius: 6px; z-index: 50; box-shadow: 0 2px 8px rgba(0,0,0,0.2); transition: right 0.3s;';
             document.body.appendChild(statusEl);
+
+            // Adjust position when chat panel is collapsed/expanded
+            var chatPanel = document.querySelector('.chat-panel');
+            if (chatPanel) {
+                var observer = new MutationObserver(function() {
+                    var isCollapsed = chatPanel.classList.contains('collapsed');
+                    statusEl.style.right = isCollapsed ? '80px' : '440px';
+                });
+                observer.observe(chatPanel, { attributes: true, attributeFilter: ['class'] });
+                // Initial check
+                if (chatPanel.classList.contains('collapsed')) {
+                    statusEl.style.right = '80px';
+                }
+            }
         }
     });
 

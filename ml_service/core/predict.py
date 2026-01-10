@@ -71,35 +71,89 @@ def predict_model(mlflow_id, x_list, input_data, run_id=None, socketio=None):
         result_df = df.copy()
         shap_values_dict = {}
 
-        # モデルインデックスを探索
-        model_idx = 0
-        while True:
-            try:
-                model_uri = f'runs:/{mlflow_id}/trained_model_{model_idx}'
-                loaded_model = mlflow.pyfunc.load_model(model_uri)
+        # ローカル環境ではファイルから直接読み込む
+        if not is_databricks_environment():
+            # ローカルのartifact_pathからモデルを探索
+            result_base = f"{get_result_path()}"
 
-                notify_status(f"モデル {model_idx} で予測中...", 30 + model_idx * 30)
+            # mlflow_idからrun_idを検索
+            model_path = None
+            for run_dir in os.listdir(result_base):
+                run_path = os.path.join(result_base, run_dir)
+                if os.path.isdir(run_path):
+                    # mlflow_idディレクトリを確認
+                    mlflow_dir = os.path.join(run_path, mlflow_id)
+                    if os.path.exists(mlflow_dir):
+                        model_path = run_path
+                        break
+                    # modelsディレクトリ内を探索
+                    models_dir = os.path.join(run_path, "models")
+                    if os.path.isdir(models_dir):
+                        for m in os.listdir(models_dir):
+                            pkl_path = os.path.join(models_dir, m, "artifacts", "model.pkl")
+                            if os.path.exists(pkl_path):
+                                model_path = run_path
+                                break
+                    if model_path:
+                        break
 
-                # 予測実行
-                predictions = loaded_model.predict(df)
-                result_df[f"predicted_target_{model_idx}"] = predictions
+            if not model_path:
+                raise ValueError(f"No model found for MLflow ID: {mlflow_id}")
 
-                # SHAP値計算
+            # モデルをロード
+            models_dir = os.path.join(model_path, "models")
+            model_idx = 0
+            for model_name in sorted(os.listdir(models_dir)):
+                pkl_path = os.path.join(models_dir, model_name, "artifacts", "model.pkl")
+                if os.path.exists(pkl_path):
+                    notify_status(f"モデル {model_idx} をロード中...", 30 + model_idx * 20)
+                    with open(pkl_path, 'rb') as f:
+                        model = pickle.load(f)
+
+                    # 予測実行
+                    predictions = model.predict(df)
+                    result_df[f"predicted_target_{model_idx}"] = predictions
+
+                    # SHAP値計算
+                    try:
+                        explainer = shap.Explainer(model.predict, df)
+                        shap_values = explainer(df)
+                        shap_values_dict[f"target_{model_idx}"] = shap_values
+                    except Exception as e:
+                        print(f"[WARN] SHAP calculation failed for model {model_idx}: {e}")
+
+                    model_idx += 1
+        else:
+            # Databricks環境ではMLflowから読み込む
+            mlflow.set_tracking_uri(get_mlflow_tracking_uri())
+            model_idx = 0
+            while True:
                 try:
-                    explainer = shap.Explainer(loaded_model.predict, df)
-                    shap_values = explainer(df)
-                    shap_values_dict[f"target_{model_idx}"] = shap_values
+                    model_uri = f'runs:/{mlflow_id}/trained_model_{model_idx}'
+                    loaded_model = mlflow.pyfunc.load_model(model_uri)
+
+                    notify_status(f"モデル {model_idx} で予測中...", 30 + model_idx * 30)
+
+                    # 予測実行
+                    predictions = loaded_model.predict(df)
+                    result_df[f"predicted_target_{model_idx}"] = predictions
+
+                    # SHAP値計算
+                    try:
+                        explainer = shap.Explainer(loaded_model.predict, df)
+                        shap_values = explainer(df)
+                        shap_values_dict[f"target_{model_idx}"] = shap_values
+                    except Exception as e:
+                        print(f"[WARN] SHAP calculation failed for model {model_idx}: {e}")
+
+                    model_idx += 1
+
                 except Exception as e:
-                    print(f"[WARN] SHAP calculation failed for model {model_idx}: {e}")
-
-                model_idx += 1
-
-            except Exception as e:
-                # モデルが見つからなくなったら終了
-                if "does not exist" in str(e) or "not found" in str(e).lower():
-                    break
-                else:
-                    raise e
+                    # モデルが見つからなくなったら終了
+                    if "does not exist" in str(e) or "not found" in str(e).lower():
+                        break
+                    else:
+                        raise e
 
         if model_idx == 0:
             raise ValueError(f"No models found for MLflow run: {mlflow_id}")
