@@ -153,8 +153,9 @@ def train_model(dataset_id, x_list, target, model_name, cv_group, run_id, socket
         df = load_dataframe(dataset_path)
         notify_status(f"データセット読み込み完了（{len(df)}行）", 10)
 
-        # カラム検証
-        validate_columns(df, x_list, target)
+        # カラム検証（targetが文字列の場合はリストに変換）
+        target_list = [target] if isinstance(target, str) else target
+        validate_columns(df, x_list, target_list)
 
         # 欠損値処理
         df = df.fillna(0)
@@ -198,8 +199,8 @@ def train_model(dataset_id, x_list, target, model_name, cv_group, run_id, socket
         shap_values_all = {}
         final_models = {}
 
-        for idx, target_col in enumerate(target):
-            notify_status(f"ハイパーパラメータ最適化中... ({idx+1}/{len(target)}: {target_col})", 25 + idx * 30)
+        for idx, target_col in enumerate(target_list):
+            notify_status(f"ハイパーパラメータ最適化中... ({idx+1}/{len(target_list)}: {target_col})", 25 + idx * 30)
 
             # HPO実行
             X = df[x_list].values
@@ -208,7 +209,7 @@ def train_model(dataset_id, x_list, target, model_name, cv_group, run_id, socket
 
             best_params = hpo_optuna(X, y, groups, model_name)
 
-            notify_status(f"クロスバリデーション実行中... ({idx+1}/{len(target)}: {target_col})", 35 + idx * 30)
+            notify_status(f"クロスバリデーション実行中... ({idx+1}/{len(target_list)}: {target_col})", 35 + idx * 30)
 
             # CV実行
             cv_result, shap_values_dict, final_model = cv_predict_sklearn(
@@ -239,7 +240,7 @@ def train_model(dataset_id, x_list, target, model_name, cv_group, run_id, socket
             mlflow_run_id = mlflow_run.info.run_id
 
             # 各目的変数のモデル保存
-            for idx, target_col in enumerate(target):
+            for idx, target_col in enumerate(target_list):
                 # モデル保存
                 mlflow.sklearn.log_model(final_models[target_col], f"trained_model_{idx}")
 
@@ -249,7 +250,7 @@ def train_model(dataset_id, x_list, target, model_name, cv_group, run_id, socket
 
             # CV結果を統合して保存
             cv_result_combined = df[x_list + [cv_group]].copy()
-            for target_col in target:
+            for target_col in target_list:
                 cv_result_combined[target_col] = results[target_col]['cv_result'][target_col]
                 cv_result_combined[f"predicted_{target_col}"] = results[target_col]['cv_result'][f"predicted_{target_col}"]
 
@@ -279,7 +280,7 @@ def train_model(dataset_id, x_list, target, model_name, cv_group, run_id, socket
             "targets": {}
         }
 
-        for target_col in target:
+        for target_col in target_list:
             result_summary["targets"][target_col] = results[target_col]['metrics']
 
         return result_summary

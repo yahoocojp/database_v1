@@ -35,3 +35,7 @@ ml_service/uploads/*
 *.tmp
 *.temp
 /tmp/
+
+# ML results
+ml_service/data/results/*
+!ml_service/data/results/.gitkeep

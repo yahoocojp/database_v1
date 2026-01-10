@@ -99,7 +99,15 @@ def validate_columns(df, x_list, target_list):
     if missing_cols:
         raise ValueError(f"Missing columns: {missing_cols}")
 
-    # 数値型チェック
+    # 数値型チェック・変換
+    for col in all_cols:
+        if df[col].dtype.kind not in 'fi':
+            # 文字列を数値に変換を試みる
+            try:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            except Exception:
+                pass
+
     non_numeric_cols = [col for col in all_cols if df[col].dtype.kind not in 'fi']
     if non_numeric_cols:
         raise ValueError(f"Non-numeric columns: {non_numeric_cols}")
