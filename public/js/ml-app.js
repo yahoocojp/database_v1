@@ -436,20 +436,41 @@ document.getElementById('chatInput').addEventListener('input', function() {
 });
 
 // Toast notification (Phase 1A++ integrated)
-function showToast(message, type = 'success') {
-    if (typeof Toast !== 'undefined') {
-        Toast.show(message, type);
-    } else {
-        // Fallback to old toast if library not loaded
-        const toast = document.getElementById('toast');
-        if (toast) {
-            document.getElementById('toastMessage').textContent = message;
-            toast.style.display = 'flex';
-            setTimeout(() => {
-                toast.style.display = 'none';
-            }, 3000);
-        }
+function showToast(message, type) {
+    type = type || 'success';
+
+    // Try window.Toast first (from toast.js library)
+    if (typeof window.Toast !== 'undefined' && typeof window.Toast.show === 'function') {
+        window.Toast.show(message, type);
+        return;
     }
+
+    // Fallback: create simple toast
+    var existingToast = document.getElementById('simpleToast');
+    if (existingToast) {
+        existingToast.remove();
+    }
+
+    var toast = document.createElement('div');
+    toast.id = 'simpleToast';
+    toast.style.cssText = 'position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 8px; color: white; font-size: 14px; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.3);';
+
+    if (type === 'error') {
+        toast.style.background = '#ef4444';
+    } else if (type === 'warning') {
+        toast.style.background = '#f59e0b';
+    } else {
+        toast.style.background = '#10b981';
+    }
+
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(function() {
+        if (toast.parentNode) {
+            toast.remove();
+        }
+    }, 4000);
 }
 
 // Modal functions (from original)
