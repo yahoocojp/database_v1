@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML App - AIエージェント統合版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --agent: #8b5cf6;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-600: #4b5563;
+            --gray-800: #1f2937;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--gray-50);
+        }
+        
+        .sidebar {
+            width: 240px;
+            background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
+            min-height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+            z-index: 50;
+        }
+        
+        .main-content {
+            margin-left: 240px;
+            margin-right: 420px;
+            padding: 24px 32px;
+            transition: margin-right 0.3s;
+        }
+        
+        .main-content.chat-collapsed {
+            margin-right: 60px;
+        }
+        
+        /* Chat Panel */
+        .chat-panel {
+            width: 420px;
+            position: fixed;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            background: white;
+            border-left: 1px solid var(--gray-200);
+            display: flex;
+            flex-direction: column;
+            z-index: 40;
+            transition: transform 0.3s, width 0.3s;
+        }
+        
+        .chat-panel.collapsed {
+            width: 60px;
+        }
+        
+        .chat-panel.collapsed .chat-header-title,
+        .chat-panel.collapsed .chat-messages,
+        .chat-panel.collapsed .chat-input-area,
+        .chat-panel.collapsed .chat-header-actions {
+            display: none;
+        }
+        
+        .chat-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+            color: white;
+        }
+        
+        .chat-header-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .chat-toggle-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        
+        .chat-toggle-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        .message {
+            max-width: 90%;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .message.user {
+            align-self: flex-end;
+        }
+        
+        .message.agent {
+            align-self: flex-start;
+        }
+        
+        .message-bubble {
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .message.user .message-bubble {
+            background: var(--primary);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        
+        .message.agent .message-bubble {
+            background: var(--gray-100);
+            color: var(--gray-800);
+            border-bottom-left-radius: 4px;
+        }
+        
+        .message-time {
+            font-size: 11px;
+            color: var(--gray-400);
+            margin-top: 4px;
+            padding: 0 4px;
+        }
+        
+        .message.user .message-time {
+            text-align: right;
+        }
+        
+        /* Config Card - AI生成の実行条件確認UI */
+        .config-card {
+            background: white;
+            border: 2px solid var(--agent);
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+        
+        .config-card-header {
+            background: linear-gradient(135deg, rgba(139,92,246,0.1) 0%, rgba(99,102,241,0.1) 100%);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid rgba(139,92,246,0.2);
+        }
+        
+        .config-card-header i {
+            color: var(--agent);
+        }
+        
+        .config-card-body {
+            padding: 16px;
+        }
+        
+        .config-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--gray-100);
+        }
+        
+        .config-row:last-child {
+            border-bottom: none;
+        }
+        
+        .config-label {
+            font-size: 13px;
+            color: var(--gray-600);
+        }
+        
+        .config-value {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-800);
+        }
+        
+        .config-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            background: var(--gray-100);
+            border-radius: 4px;
+            font-size: 12px;
+            margin: 2px;
+        }
+        
+        .config-card-actions {
+            display: flex;
+            gap: 8px;
+            padding: 12px 16px;
+            border-top: 1px solid var(--gray-100);
+            background: var(--gray-50);
+        }
+        
+        .config-btn {
+            flex: 1;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        
+        .config-btn-primary {
+            background: var(--agent);
+            color: white;
+            border: none;
+        }
+        
+        .config-btn-primary:hover {
+            background: #7c3aed;
+        }
+        
+        .config-btn-secondary {
+            background: white;
+            color: var(--gray-600);
+            border: 1px solid var(--gray-200);
+        }
+        
+        .config-btn-secondary:hover {
+            background: var(--gray-50);
+        }
+        
+        .config-btn-ghost {
+            background: transparent;
+            color: var(--gray-500);
+            border: none;
+        }
+        
+        .config-btn-ghost:hover {
+            color: var(--gray-700);
+        }
+        
+        /* Chat Input */
+        .chat-input-area {
+            padding: 16px 20px;
+            border-top: 1px solid var(--gray-200);
+            background: white;
+        }
+        
+        .chat-input-wrapper {
+            display: flex;
+            align-items: flex-end;
+            gap: 12px;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            padding: 12px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        
+        .chat-input-wrapper:focus-within {
+            border-color: var(--agent);
+            box-shadow: 0 0 0 3px rgba(139,92,246,0.1);
+        }
+        
+        .chat-input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            resize: none;
+            outline: none;
+            min-height: 24px;
+            max-height: 120px;
+            line-height: 1.5;
+        }
+        
+        .chat-send-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: var(--agent);
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, transform 0.1s;
+        }
+        
+        .chat-send-btn:hover {
+            background: #7c3aed;
+        }
+        
+        .chat-send-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .chat-hints {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        
+        .chat-hint {
+            padding: 6px 12px;
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: 20px;
+            font-size: 12px;
+            color: var(--gray-600);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .chat-hint:hover {
+            border-color: var(--agent);
+            color: var(--agent);
+            background: rgba(139,92,246,0.05);
+        }
+        
+        /* Typing indicator */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 12px 16px;
+            background: var(--gray-100);
+            border-radius: 16px;
+            border-bottom-left-radius: 4px;
+            width: fit-content;
+        }
+        
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--gray-400);
+            border-radius: 50%;
+            animation: typingBounce 1.4s ease-in-out infinite;
+        }
+        
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes typingBounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-4px); }
+        }
+        
+        /* Original styles preserved */
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: box-shadow 0.2s;
+        }
+        
+        .card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .status-running { background: #dbeafe; color: #1d4ed8; }
+        .status-complete { background: #d1fae5; color: #059669; }
+        .status-failed { background: #fee2e2; color: #dc2626; }
+        .status-waiting { background: #fef3c7; color: #d97706; }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: rgba(255,255,255,0.7);
+            transition: all 0.2s;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+        }
+        
+        .nav-item:hover {
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+        
+        .nav-item.active {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border-left-color: #818cf8;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+        
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-secondary { background: white; color: var(--gray-600); border: 1px solid var(--gray-200); }
+        .btn-secondary:hover { background: var(--gray-50); }
+        .btn-ghost { background: transparent; color: var(--gray-600); }
+        .btn-ghost:hover { background: var(--gray-100); }
+        
+        .btn-agent {
+            background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+            color: white;
+        }
+        
+        .btn-agent:hover {
+            background: linear-gradient(135deg, #6d28d9 0%, #4f46e5 100%);
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        
+        .data-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--gray-600);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--gray-200);
+            background: var(--gray-50);
+        }
+        
+        .data-table td {
+            padding: 16px;
+            border-bottom: 1px solid var(--gray-100);
+            vertical-align: middle;
+        }
+        
+        .data-table tbody tr { transition: background 0.15s; }
+        .data-table tbody tr:hover { background: var(--gray-50); }
+        
+        .search-input {
+            display: flex;
+            align-items: center;
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            padding: 0 12px;
+        }
+        
+        .search-input input {
+            border: none;
+            padding: 10px 8px;
+            outline: none;
+            width: 200px;
+        }
+        
+        .dropdown { position: relative; }
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 160px;
+            z-index: 100;
+            display: none;
+            padding: 8px 0;
+        }
+        .dropdown:hover .dropdown-menu { display: block; }
+        .dropdown-item {
+            padding: 10px 16px;
+            font-size: 14px;
+            color: var(--gray-600);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dropdown-item:hover { background: var(--gray-50); color: var(--gray-800); }
+        
+        /* Collapsed toggle button */
+        .collapsed-toggle {
+            display: none;
+            width: 100%;
+            height: 100%;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--agent);
+        }
+        
+        .chat-panel.collapsed .collapsed-toggle {
+            display: flex;
+        }
+        
+        .collapsed-toggle i {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .collapsed-toggle span {
+            writing-mode: vertical-rl;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--gray-800);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 1000;
+            animation: toastIn 0.3s ease;
+        }
+        
+        @keyframes toastIn {
+            from { opacity: 0; transform: translate(-50%, 20px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="p-5">
+            <div class="flex items-center gap-3 mb-8">
+                <div class="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-brain text-white"></i>
+                </div>
+                <div>
+                    <div class="text-white font-semibold">ML Platform</div>
+                    <div class="text-indigo-300 text-xs">Materials R&D</div>
+                </div>
+            </div>
+            
+            <nav class="space-y-1">
+                <div class="nav-item active">
+                    <i class="fas fa-play-circle w-5 mr-3"></i>
+                    ラン管理
+                </div>
+                <div class="nav-item">
+                    <i class="fas fa-database w-5 mr-3"></i>
+                    データセット
+                </div>
+                <div class="nav-item">
+                    <i class="fas fa-cube w-5 mr-3"></i>
+                    モデル
+                </div>
+                <div class="nav-item">
+                    <i class="fas fa-chart-line w-5 mr-3"></i>
+                    分析
+                </div>
+                <div class="nav-item">
+                    <i class="fas fa-cog w-5 mr-3"></i>
+                    設定
+                </div>
+            </nav>
+        </div>
+        
+        <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-indigo-800">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-indigo-400 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                    TK
+                </div>
+                <div class="text-white text-sm">田中</div>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">ラン管理</h1>
+                <p class="text-gray-500 text-sm mt-1">学習・予測・最適化タスクの実行と管理</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <button class="btn btn-secondary" onclick="openModal()">
+                    <i class="fas fa-plus"></i>
+                    新規ラン（GUI）
+                </button>
+                <button class="btn btn-agent" onclick="focusChat()">
+                    <i class="fas fa-robot"></i>
+                    AIに依頼
+                </button>
+            </div>
+        </div>
+        
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="card p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-2xl font-bold text-gray-800">24</div>
+                        <div class="text-sm text-gray-500">総ラン数</div>
+                    </div>
+                    <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-layer-group text-indigo-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-2xl font-bold text-green-600">18</div>
+                        <div class="text-sm text-gray-500">完了</div>
+                    </div>
+                    <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-check text-green-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-2xl font-bold text-blue-600">3</div>
+                        <div class="text-sm text-gray-500">実行中</div>
+                    </div>
+                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-spinner text-blue-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-2xl font-bold text-purple-600">0.912</div>
+                        <div class="text-sm text-gray-500">最高R²</div>
+                    </div>
+                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-trophy text-purple-600"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Table -->
+        <div class="card">
+            <div class="p-4 border-b border-gray-100 flex items-center justify-between">
+                <div class="search-input">
+                    <i class="fas fa-search text-gray-400"></i>
+                    <input type="text" placeholder="ランを検索...">
+                </div>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-ghost"><i class="fas fa-filter"></i> フィルタ</button>
+                    <button class="btn btn-ghost"><i class="fas fa-download"></i> エクスポート</button>
+                </div>
+            </div>
+            
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ラン名</th>
+                        <th>タイプ</th>
+                        <th>データセット</th>
+                        <th>精度</th>
+                        <th>ステータス</th>
+                        <th>実行日時</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 bg-green-100 rounded flex items-center justify-center">
+                                    <i class="fas fa-graduation-cap text-green-600 text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-gray-800">run_20250610_001</div>
+                                    <div class="text-xs text-gray-500">LightGBM + GridSearch</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="text-sm text-gray-600">学習</span></td>
+                        <td><span class="text-sm text-gray-600">carbide_dataset_v3</span></td>
+                        <td>
+                            <div class="text-sm font-medium text-gray-800">R²: 0.912</div>
+                            <div class="text-xs text-gray-500">RMSE: 0.142</div>
+                        </td>
+                        <td><span class="status-badge status-complete"><i class="fas fa-check-circle mr-1"></i>完了</span></td>
+                        <td><span class="text-sm text-gray-600">2025/06/10 14:32</span></td>
+                        <td>
+                            <div class="dropdown">
+                                <button class="btn btn-ghost"><i class="fas fa-ellipsis-v"></i></button>
+                                <div class="dropdown-menu">
+                                    <div class="dropdown-item"><i class="fas fa-eye"></i>結果を見る</div>
+                                    <div class="dropdown-item"><i class="fas fa-chart-bar"></i>SHAP分析</div>
+                                    <div class="dropdown-item"><i class="fas fa-download"></i>CSV出力</div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 bg-blue-100 rounded flex items-center justify-center">
+                                    <i class="fas fa-bullseye text-blue-600 text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-gray-800">run_20250610_002</div>
+                                    <div class="text-xs text-gray-500">Bayesian Optimization</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="text-sm text-gray-600">最適化</span></td>
+                        <td><span class="text-sm text-gray-600">carbide_dataset_v3</span></td>
+                        <td>
+                            <div class="text-sm text-gray-500">処理中...</div>
+                            <div class="mt-1 w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div class="h-full bg-blue-500 rounded-full" style="width: 65%"></div>
+                            </div>
+                        </td>
+                        <td><span class="status-badge status-running"><i class="fas fa-spinner fa-spin mr-1"></i>実行中</span></td>
+                        <td><span class="text-sm text-gray-600">2025/06/10 15:10</span></td>
+                        <td>
+                            <div class="dropdown">
+                                <button class="btn btn-ghost"><i class="fas fa-ellipsis-v"></i></button>
+                                <div class="dropdown-menu">
+                                    <div class="dropdown-item"><i class="fas fa-eye"></i>進捗を見る</div>
+                                    <div class="dropdown-item"><i class="fas fa-stop"></i>キャンセル</div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 bg-purple-100 rounded flex items-center justify-center">
+                                    <i class="fas fa-magic text-purple-600 text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-gray-800">run_20250609_005</div>
+                                    <div class="text-xs text-gray-500">LightGBM予測</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="text-sm text-gray-600">予測</span></td>
+                        <td><span class="text-sm text-gray-600">new_samples_0609</span></td>
+                        <td><div class="text-sm text-gray-500">—</div></td>
+                        <td><span class="status-badge status-complete"><i class="fas fa-check-circle mr-1"></i>完了</span></td>
+                        <td><span class="text-sm text-gray-600">2025/06/09 10:45</span></td>
+                        <td>
+                            <div class="dropdown">
+                                <button class="btn btn-ghost"><i class="fas fa-ellipsis-v"></i></button>
+                                <div class="dropdown-menu">
+                                    <div class="dropdown-item"><i class="fas fa-eye"></i>結果を見る</div>
+                                    <div class="dropdown-item"><i class="fas fa-download"></i>CSV出力</div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+                <div class="text-sm text-gray-600">24件中 1-10件を表示</div>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-ghost" disabled><i class="fas fa-chevron-left"></i></button>
+                    <button class="btn btn-ghost" style="background: var(--primary); color: white;">1</button>
+                    <button class="btn btn-ghost">2</button>
+                    <button class="btn btn-ghost">3</button>
+                    <button class="btn btn-ghost"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- AI Chat Panel -->
+    <aside class="chat-panel" id="chatPanel">
+        <!-- Collapsed state toggle -->
+        <div class="collapsed-toggle" onclick="toggleChat()">
+            <i class="fas fa-robot"></i>
+            <span>AI アシスタント</span>
+        </div>
+        
+        <!-- Chat Header -->
+        <div class="chat-header">
+            <div class="chat-header-title">
+                <i class="fas fa-robot text-xl"></i>
+                <div>
+                    <div class="font-semibold">ML アシスタント</div>
+                    <div class="text-xs text-indigo-200">自然言語でタスクを依頼</div>
+                </div>
+            </div>
+            <div class="chat-header-actions flex items-center gap-2">
+                <button class="chat-toggle-btn" onclick="clearChat()" title="履歴クリア">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+                <button class="chat-toggle-btn" onclick="toggleChat()" title="パネルを閉じる">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Chat Messages -->
+        <div class="chat-messages" id="chatMessages">
+            <!-- Welcome message -->
+            <div class="message agent">
+                <div class="message-bubble">
+                    こんにちは！MLタスクの設定をお手伝いします。<br><br>
+                    例えば：<br>
+                    • 「炭化物データで粒径を予測したい」<br>
+                    • 「先月のランで精度が高かったのは？」<br>
+                    • 「run_001の結果を解説して」
+                </div>
+                <div class="message-time">15:30</div>
+            </div>
+        </div>
+        
+        <!-- Chat Input -->
+        <div class="chat-input-area">
+            <div class="chat-input-wrapper">
+                <textarea 
+                    class="chat-input" 
+                    id="chatInput" 
+                    placeholder="タスクを自然言語で入力..."
+                    rows="1"
+                    onkeydown="handleKeyDown(event)"
+                ></textarea>
+                <button class="chat-send-btn" onclick="sendMessage()">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+            <div class="chat-hints">
+                <div class="chat-hint" onclick="useHint('炭化物データで硬さを予測したい')">硬さ予測</div>
+                <div class="chat-hint" onclick="useHint('最近のランの精度を比較して')">精度比較</div>
+                <div class="chat-hint" onclick="useHint('最適化を実行したい')">最適化</div>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- Toast Notification -->
+    <div class="toast" id="toast" style="display: none;">
+        <i class="fas fa-check-circle text-green-400"></i>
+        <span id="toastMessage">ランを開始しました</span>
+    </div>
+    
+    <script>
+        // Chat toggle
+        function toggleChat() {
+            const panel = document.getElementById('chatPanel');
+            const main = document.getElementById('mainContent');
+            panel.classList.toggle('collapsed');
+            main.classList.toggle('chat-collapsed');
+        }
+        
+        // Focus chat input
+        function focusChat() {
+            const panel = document.getElementById('chatPanel');
+            const main = document.getElementById('mainContent');
+            if (panel.classList.contains('collapsed')) {
+                panel.classList.remove('collapsed');
+                main.classList.remove('chat-collapsed');
+            }
+            document.getElementById('chatInput').focus();
+        }
+        
+        // Send message
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+            
+            addMessage(message, 'user');
+            input.value = '';
+            input.style.height = 'auto';
+            
+            // Show typing indicator
+            showTyping();
+            
+            // Simulate AI response
+            setTimeout(() => {
+                hideTyping();
+                processUserMessage(message);
+            }, 1500);
+        }
+        
+        // Add message to chat
+        function addMessage(text, sender) {
+            const container = document.getElementById('chatMessages');
+            const time = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            messageDiv.innerHTML = `
+                <div class="message-bubble">${text}</div>
+                <div class="message-time">${time}</div>
+            `;
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        // Add config card (AI-generated execution settings)
+        function addConfigCard(config) {
+            const container = document.getElementById('chatMessages');
+            const time = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message agent';
+            messageDiv.innerHTML = `
+                <div class="message-bubble" style="padding: 8px;">
+                    以下の設定で実行しますか？
+                    <div class="config-card">
+                        <div class="config-card-header">
+                            <i class="fas fa-cog"></i>
+                            <span class="font-medium text-gray-800">実行条件</span>
+                        </div>
+                        <div class="config-card-body">
+                            <div class="config-row">
+                                <span class="config-label">タイプ</span>
+                                <span class="config-value">${config.type}</span>
+                            </div>
+                            <div class="config-row">
+                                <span class="config-label">データセット</span>
+                                <span class="config-value">${config.dataset}</span>
+                            </div>
+                            <div class="config-row">
+                                <span class="config-label">特徴量</span>
+                                <div>
+                                    ${config.features.map(f => `<span class="config-tag">${f}</span>`).join('')}
+                                </div>
+                            </div>
+                            <div class="config-row">
+                                <span class="config-label">目的変数</span>
+                                <span class="config-value">${config.target}</span>
+                            </div>
+                            <div class="config-row">
+                                <span class="config-label">モデル</span>
+                                <span class="config-value">${config.model}</span>
+                            </div>
+                        </div>
+                        <div class="config-card-actions">
+                            <button class="config-btn config-btn-ghost" onclick="cancelConfig()">
+                                <i class="fas fa-times"></i>
+                                キャンセル
+                            </button>
+                            <button class="config-btn config-btn-secondary" onclick="editConfig()">
+                                <i class="fas fa-edit"></i>
+                                修正
+                            </button>
+                            <button class="config-btn config-btn-primary" onclick="executeConfig()">
+                                <i class="fas fa-play"></i>
+                                実行
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="message-time">${time}</div>
+            `;
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        // Process user message and generate response
+        function processUserMessage(message) {
+            const lowerMsg = message.toLowerCase();
+            
+            // Pattern: Create/Run task
+            if (lowerMsg.includes('予測') || lowerMsg.includes('学習') || lowerMsg.includes('最適化')) {
+                let type = '学習';
+                if (lowerMsg.includes('予測')) type = '予測';
+                if (lowerMsg.includes('最適化')) type = '最適化';
+                
+                // Extract features mentioned
+                const features = [];
+                if (lowerMsg.includes('温度')) features.push('Temperature');
+                if (lowerMsg.includes('圧力')) features.push('Pressure');
+                if (lowerMsg.includes('時間')) features.push('Time');
+                if (lowerMsg.includes('冷却')) features.push('CoolingRate');
+                if (features.length === 0) features.push('Temperature', 'Pressure', 'Time');
+                
+                // Extract target
+                let target = 'Particle_Size';
+                if (lowerMsg.includes('硬さ') || lowerMsg.includes('硬度')) target = 'Hardness';
+                if (lowerMsg.includes('粒径') || lowerMsg.includes('粒子')) target = 'Particle_Size';
+                if (lowerMsg.includes('強度')) target = 'Strength';
+                
+                // Generate config
+                addConfigCard({
+                    type: type,
+                    dataset: 'carbide_dataset_v3',
+                    features: features,
+                    target: target,
+                    model: type === '学習' ? 'LightGBM + GridSearch' : (type === '最適化' ? 'Bayesian Optimization' : 'LightGBM')
+                });
+            }
+            // Pattern: Query results
+            else if (lowerMsg.includes('精度') || lowerMsg.includes('比較') || lowerMsg.includes('結果')) {
+                addMessage(`最近のラン精度を分析しました：<br><br>
+                    <b>Top 3 精度</b><br>
+                    1. run_20250610_001: R²=0.912<br>
+                    2. run_20250608_004: R²=0.891<br>
+                    3. run_20250605_002: R²=0.878<br><br>
+                    詳細を見たいランはありますか？`, 'agent');
+            }
+            // Pattern: Explain results
+            else if (lowerMsg.includes('解説') || lowerMsg.includes('説明') || lowerMsg.includes('shap')) {
+                addMessage(`<b>run_20250610_001 の結果解説</b><br><br>
+                    このモデルでは <b>Temperature</b> が粒径に最も強く寄与しています（SHAP値: 0.34）。<br><br>
+                    850℃以上で粒径が急激に増大する傾向が見られ、Pressure との交互作用も確認されました。<br><br>
+                    <b>改善提案</b>: 冷却速度を特徴量に追加すると、予測精度が向上する可能性があります。`, 'agent');
+            }
+            // Default response
+            else {
+                addMessage(`「${message}」について確認します。<br><br>
+                    具体的なタスクを教えてください：<br>
+                    • どのデータセットを使いますか？<br>
+                    • 何を予測/最適化しますか？`, 'agent');
+            }
+        }
+        
+        // Show typing indicator
+        function showTyping() {
+            const container = document.getElementById('chatMessages');
+            const typingDiv = document.createElement('div');
+            typingDiv.id = 'typingIndicator';
+            typingDiv.className = 'message agent';
+            typingDiv.innerHTML = `
+                <div class="typing-indicator">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            `;
+            container.appendChild(typingDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        // Hide typing indicator
+        function hideTyping() {
+            const typing = document.getElementById('typingIndicator');
+            if (typing) typing.remove();
+        }
+        
+        // Config card actions
+        function executeConfig() {
+            showToast('ランを開始しました');
+            addMessage('ランを開始しました。進捗はテーブルで確認できます。完了したら通知します。', 'agent');
+        }
+        
+        function editConfig() {
+            addMessage('修正したい項目を教えてください。例：「冷却速度も追加して」「モデルをXGBoostに変更」', 'agent');
+        }
+        
+        function cancelConfig() {
+            addMessage('キャンセルしました。他にお手伝いできることはありますか？', 'agent');
+        }
+        
+        // Use hint
+        function useHint(text) {
+            document.getElementById('chatInput').value = text;
+            document.getElementById('chatInput').focus();
+        }
+        
+        // Clear chat
+        function clearChat() {
+            const container = document.getElementById('chatMessages');
+            container.innerHTML = `
+                <div class="message agent">
+                    <div class="message-bubble">
+                        チャットをクリアしました。新しいタスクを入力してください。
+                    </div>
+                    <div class="message-time">${new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+            `;
+        }
+        
+        // Handle Enter key
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+        
+        // Auto-resize textarea
+        document.getElementById('chatInput').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+        
+        // Toast notification
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').textContent = message;
+            toast.style.display = 'flex';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Modal functions (from original)
+        function openModal() {
+            // For demo, just show toast
+            showToast('GUI モーダルを開く（デモ）');
+        }
+    </script>
+</body>
+</html>

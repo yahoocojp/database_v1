@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML App - AIエージェント統合版</title>
+
+    <!-- Phase 1A++ Libraries -->
+    <script src="/lib/toast.js"></script>
+    <script src="/lib/error-handler.js"></script>
+    <script src="/lib/debug-manager.js"></script>
+    <script src="/lib/websocket-manager.js"></script>
+    <script src="/lib/router.js"></script>
+    <script src="/lib/theme-manager.js"></script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Refactored: External CSS -->
+    <link rel="stylesheet" href="/css/common.css">
+    <link rel="stylesheet" href="/css/ml-app.css">
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="p-5">
+            <div class="flex items-center gap-3 mb-8">
+                <div class="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-brain text-white"></i>
+                </div>
+                <div>
+                    <div class="text-white font-semibold">ML Platform</div>
+                    <div class="text-indigo-300 text-xs">Materials R&D</div>
+                </div>
+            </div>
+
+            <nav class="space-y-1">
+                <a href="/" class="nav-back-link" style="text-decoration: none; color: rgba(255,255,255,0.7); display: flex; align-items: center; padding: 12px 16px; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); transition: all 0.2s;" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.7)'">
+                    <i class="fas fa-arrow-left w-5 mr-3"></i>
+                    Database App へ戻る
+                </a>
+                <div class="nav-item active" id="navRuns" onclick="switchView('runs')">
+                    <i class="fas fa-play-circle w-5 mr-3"></i>
+                    ラン管理
+                </div>
+                <div class="nav-item" id="navDatasets" onclick="switchView('datasets')">
+                    <i class="fas fa-database w-5 mr-3"></i>
+                    データセット
+                </div>
+                <div class="nav-item" id="navModels" onclick="switchView('models')">
+                    <i class="fas fa-cube w-5 mr-3"></i>
+                    モデル学習
+                </div>
+                <div class="nav-item" id="navAnalysis" onclick="switchView('analysis')">
+                    <i class="fas fa-chart-line w-5 mr-3"></i>
+                    分析
+                </div>
+                <div class="nav-item" id="navSettings" onclick="switchView('settings')">
+                    <i class="fas fa-cog w-5 mr-3"></i>
+                    設定
+                </div>
+            </nav>
+        </div>
+
+        <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-indigo-800">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 bg-indigo-400 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                        TK
+                    </div>
+                    <div class="text-white text-sm">田中</div>
+                </div>
+                <!-- Theme Toggle Button -->
+                <button onclick="toggleTheme()" class="w-8 h-8 rounded-lg bg-indigo-700 hover:bg-indigo-600 flex items-center justify-center text-white transition-colors" title="テーマ切替">
+                    <i id="themeIcon" class="fas fa-moon"></i>
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+        <!-- Quick Action Banner -->
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 16px 24px; border-radius: 12px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);">
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <div style="background: rgba(255,255,255,0.2); width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-rocket" style="color: white; font-size: 24px;"></i>
+                </div>
+                <div>
+                    <div style="color: white; font-weight: 600; font-size: 16px; margin-bottom: 4px;">ML学習を開始</div>
+                    <div style="color: rgba(255,255,255,0.9); font-size: 13px;">データセットを選択してモデル学習を開始できます</div>
+                </div>
+            </div>
+            <button onclick="openTrainingModal()" style="background: white; color: #667eea; padding: 10px 20px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.2)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
+                <i class="fas fa-brain"></i>
+                学習を開始
+            </button>
+        </div>
+
+        <!-- Runs View -->
+        <div id="runsView" class="view-container">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800">ラン管理</h1>
+                    <p class="text-gray-500 text-sm mt-1">学習・予測・最適化タスクの実行と管理</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button class="btn btn-primary" onclick="openTaskSelectModal()">
+                        <i class="fas fa-plus"></i>
+                        新規タスク
+                    </button>
+                    <button class="btn btn-secondary" onclick="openModelsModal()">
+                        <i class="fas fa-brain"></i>
+                        モデル一覧
+                    </button>
+                    <button class="btn btn-agent" onclick="focusChat()">
+                        <i class="fas fa-robot"></i>
+                        AIに依頼
+                    </button>
+                </div>
+            </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="card p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-2xl font-bold text-gray-800" id="statsTotalRuns">0</div>
+                        <div class="text-sm text-gray-500">総ラン数</div>
+                    </div>
+                    <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-layer-group text-indigo-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-2xl font-bold text-green-600" id="statsCompletedRuns">0</div>
+                        <div class="text-sm text-gray-500">完了</div>
+                    </div>
+                    <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-check text-green-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-2xl font-bold text-blue-600" id="statsRunningRuns">0</div>
+                        <div class="text-sm text-gray-500">実行中</div>
+                    </div>
+                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-spinner text-blue-600"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-2xl font-bold text-purple-600" id="statsBestR2">-</div>
+                        <div class="text-sm text-gray-500">最高R²</div>
+                    </div>
+                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-trophy text-purple-600"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="card">
+            <div class="p-4 border-b border-gray-100 flex items-center justify-between">
+                <div class="search-input">
+                    <i class="fas fa-search text-gray-400"></i>
+                    <input type="text" placeholder="ランを検索...">
+                </div>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-ghost"><i class="fas fa-filter"></i> フィルタ</button>
+                    <button class="btn btn-ghost"><i class="fas fa-download"></i> エクスポート</button>
+                </div>
+            </div>
+
+            <table class="data-table" id="runsTable">
+                <thead>
+                    <tr>
+                        <th>ラン名</th>
+                        <th>タイプ</th>
+                        <th>データセット</th>
+                        <th>精度</th>
+                        <th>ステータス</th>
+                        <th>実行日時</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="runsTableBody">
+                    <!-- Dynamic content rendered by JavaScript -->
+                </tbody>
+            </table>
+            <div id="runsEmptyState" class="p-8 text-center text-gray-500" style="display: none;">
+                <i class="fas fa-inbox text-4xl mb-4"></i>
+                <p>ランがありません。「新規ラン」または「AIに依頼」で学習を開始してください。</p>
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+                <div class="text-sm text-gray-600">24件中 1-10件を表示</div>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-ghost" disabled><i class="fas fa-chevron-left"></i></button>
+                    <button class="btn btn-ghost" style="background: var(--primary); color: white;">1</button>
+                    <button class="btn btn-ghost">2</button>
+                    <button class="btn btn-ghost">3</button>
+                    <button class="btn btn-ghost"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+        </div>
+        </div>
+
+        <!-- Datasets View -->
+        <div id="datasetsView" class="view-container" style="display: none;">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800">データセット管理</h1>
+                    <p class="text-gray-500 text-sm mt-1">インポートされたデータセットの確認・管理</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button class="btn btn-secondary" onclick="refreshDatasets()">
+                        <i class="fas fa-sync"></i>
+                        更新
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-4 gap-4 mb-6">
+                <div class="card p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-2xl font-bold text-gray-800" id="totalDatasets">0</div>
+                            <div class="text-sm text-gray-500">総データセット数</div>
+                        </div>
+                        <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-database text-blue-600"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-2xl font-bold text-green-600" id="totalRows">0</div>
+                            <div class="text-sm text-gray-500">総行数</div>
+                        </div>
+                        <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-table text-green-600"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-2xl font-bold text-purple-600" id="totalColumns">0</div>
+                            <div class="text-sm text-gray-500">平均列数</div>
+                        </div>
+                        <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-columns text-purple-600"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-2xl font-bold text-orange-600" id="latestImport">--</div>
+                            <div class="text-sm text-gray-500">最新インポート</div>
+                        </div>
+                        <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-clock text-orange-600"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Datasets List -->
+            <div class="card">
+                <div class="p-4 border-b border-gray-100 flex items-center justify-between">
+                    <div class="search-input">
+                        <i class="fas fa-search text-gray-400"></i>
+                        <input type="text" placeholder="データセットを検索..." id="datasetSearch">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button class="btn btn-ghost"><i class="fas fa-filter"></i> フィルタ</button>
+                    </div>
+                </div>
+
+                <div id="datasetsList">
+                    <!-- Datasets will be rendered here -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- AI Chat Panel -->
+    <aside class="chat-panel" id="chatPanel">
+        <!-- Collapsed state toggle -->
+        <div class="collapsed-toggle" onclick="toggleChat()">
+            <i class="fas fa-robot"></i>
+            <span>AI アシスタント</span>
+        </div>
+
+        <!-- Chat Header -->
+        <div class="chat-header">
+            <div class="chat-header-title">
+                <i class="fas fa-robot text-xl"></i>
+                <div>
+                    <div class="font-semibold">ML アシスタント</div>
+                    <div class="text-xs text-indigo-200">自然言語でタスクを依頼</div>
+                </div>
+            </div>
+            <div class="chat-header-actions flex items-center gap-2">
+                <button class="chat-toggle-btn" onclick="clearChat()" title="履歴クリア">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+                <button class="chat-toggle-btn" onclick="toggleChat()" title="パネルを閉じる">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat Messages -->
+        <div class="chat-messages" id="chatMessages">
+            <!-- Welcome message -->
+            <div class="message agent">
+                <div class="message-bubble">
+                    こんにちは！MLタスクの設定をお手伝いします。<br><br>
+                    例えば：<br>
+                    • 「炭化物データで粒径を予測したい」<br>
+                    • 「先月のランで精度が高かったのは？」<br>
+                    • 「run_001の結果を解説して」
+                </div>
+                <div class="message-time">15:30</div>
+            </div>
+        </div>
+
+        <!-- Chat Input -->
+        <div class="chat-input-area">
+            <div class="chat-input-wrapper">
+                <textarea
+                    class="chat-input"
+                    id="chatInput"
+                    placeholder="タスクを自然言語で入力..."
+                    rows="1"
+                    onkeydown="handleKeyDown(event)"
+                ></textarea>
+                <button class="chat-send-btn" onclick="sendMessage()">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+            <div class="chat-hints">
+                <div class="chat-hint" onclick="useHint('炭化物データで硬さを予測したい')">硬さ予測</div>
+                <div class="chat-hint" onclick="useHint('最近のランの精度を比較して')">精度比較</div>
+                <div class="chat-hint" onclick="useHint('最適化を実行したい')">最適化</div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ML Training Modal -->
+    <div id="trainingModal" class="modal-overlay" style="display: none;">
+        <div class="modal-container">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fas fa-brain"></i>
+                    <span>ML モデル学習</span>
+                </div>
+                <button class="modal-close" onclick="closeTrainingModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Step Indicator -->
+                <div class="step-indicator">
+                    <div class="step active" id="step1Indicator">
+                        <div class="step-number">1</div>
+                        <div class="step-label">データ選択</div>
+                    </div>
+                    <div class="step-line"></div>
+                    <div class="step" id="step2Indicator">
+                        <div class="step-number">2</div>
+                        <div class="step-label">モデル設定</div>
+                    </div>
+                    <div class="step-line"></div>
+                    <div class="step" id="step3Indicator">
+                        <div class="step-number">3</div>
+                        <div class="step-label">学習実行</div>
+                    </div>
+                </div>
+
+                <!-- Step 1: Dataset Selection -->
+                <div class="modal-step" id="trainingStep1">
+                    <h3 class="step-title">データセットを選択</h3>
+                    <div class="form-group">
+                        <label>データセット</label>
+                        <select id="trainingDatasetSelect" class="form-select">
+                            <option value="">データセットを選択してください</option>
+                        </select>
+                    </div>
+                    <div id="selectedDatasetInfo" class="dataset-info" style="display: none;">
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <span class="info-label">行数</span>
+                                <span class="info-value" id="datasetRows">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">列数</span>
+                                <span class="info-value" id="datasetCols">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">作成日</span>
+                                <span class="info-value" id="datasetDate">-</span>
+                            </div>
+                        </div>
+                        <div class="columns-preview">
+                            <label>カラム一覧</label>
+                            <div id="columnsList" class="columns-list"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Model Configuration -->
+                <div class="modal-step" id="trainingStep2" style="display: none;">
+                    <h3 class="step-title">モデル設定</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>アルゴリズム</label>
+                            <select id="algorithmSelect" class="form-select">
+                                <option value="lightgbm">LightGBM（推奨）</option>
+                                <option value="xgboost">XGBoost</option>
+                                <option value="catboost">CatBoost</option>
+                                <option value="mlp">MLP（ニューラルネット）</option>
+                                <option value="randomforest">Random Forest</option>
+                                <option value="linear">線形回帰</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>タスクタイプ</label>
+                            <select id="taskTypeSelect" class="form-select">
+                                <option value="regression">回帰（数値予測）</option>
+                                <option value="classification">分類</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>目的変数（予測対象）</label>
+                        <select id="targetSelect" class="form-select">
+                            <option value="">列を選択してください</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>説明変数（特徴量）</label>
+                        <div id="featureCheckboxes" class="checkbox-group"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>CV用グループ列（オプション）</label>
+                        <select id="cvGroupSelect" class="form-select">
+                            <option value="">なし（ランダムK-Fold）</option>
+                        </select>
+                        <div class="form-hint">Leave-One-Group-Out交差検証に使用するカテゴリ列を指定</div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>CV分割数</label>
+                            <select id="cvFoldSelect" class="form-select">
+                                <option value="3">3-Fold</option>
+                                <option value="5" selected>5-Fold（推奨）</option>
+                                <option value="10">10-Fold</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>HPO試行回数</label>
+                            <select id="hpoTrialsSelect" class="form-select">
+                                <option value="10">10（高速）</option>
+                                <option value="30" selected>30（標準）</option>
+                                <option value="50">50（精密）</option>
+                                <option value="100">100（最高精度）</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Training Execution -->
+                <div class="modal-step" id="trainingStep3" style="display: none;">
+                    <h3 class="step-title">学習を実行</h3>
+                    <div class="training-summary">
+                        <div class="summary-item">
+                            <span class="summary-label">データセット</span>
+                            <span class="summary-value" id="summaryDataset">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">アルゴリズム</span>
+                            <span class="summary-value" id="summaryAlgorithm">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">目的変数</span>
+                            <span class="summary-value" id="summaryTarget">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">説明変数</span>
+                            <span class="summary-value" id="summaryFeatures">-</span>
+                        </div>
+                    </div>
+                    <div id="trainingProgress" class="training-progress" style="display: none;">
+                        <div class="progress-header">
+                            <span>学習中...</span>
+                            <span id="progressPercent">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                        </div>
+                        <div class="progress-log" id="progressLog"></div>
+                    </div>
+                    <div id="trainingResult" class="training-result" style="display: none;">
+                        <div class="result-header success">
+                            <i class="fas fa-check-circle"></i>
+                            <span>学習完了</span>
+                        </div>
+                        <div class="result-metrics">
+                            <div class="metric">
+                                <span class="metric-label">R² Score</span>
+                                <span class="metric-value" id="resultR2">-</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">RMSE</span>
+                                <span class="metric-value" id="resultRMSE">-</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">MAE</span>
+                                <span class="metric-value" id="resultMAE">-</span>
+                            </div>
+                        </div>
+                        <!-- Y-Y Plot -->
+                        <div class="mt-4">
+                            <h4 class="font-semibold mb-2">Y-Yプロット（実測 vs 予測）</h4>
+                            <div id="yyPlotContainer" class="yy-plot-container">
+                                <canvas id="yyPlotCanvas" width="400" height="300"></canvas>
+                            </div>
+                        </div>
+                        <!-- CV Group RMSE -->
+                        <div class="mt-4" id="cvRmseSection" style="display: none;">
+                            <h4 class="font-semibold mb-2">CV群別RMSE</h4>
+                            <div id="cvRmseChart" class="cv-rmse-chart"></div>
+                        </div>
+                        <!-- Feature Importance -->
+                        <div class="mt-4">
+                            <h4 class="font-semibold mb-2">特徴量重要度（SHAP）</h4>
+                            <div id="resultShapChart" class="shap-chart"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btnPrevStep" onclick="prevTrainingStep()" style="display: none;">
+                    <i class="fas fa-arrow-left"></i> 戻る
+                </button>
+                <div class="footer-spacer"></div>
+                <button class="btn btn-secondary" onclick="closeTrainingModal()">
+                    キャンセル
+                </button>
+                <button class="btn btn-primary" id="btnNextStep" onclick="nextTrainingStep()">
+                    次へ <i class="fas fa-arrow-right"></i>
+                </button>
+                <button class="btn btn-agent" id="btnStartTraining" onclick="startTraining()" style="display: none;">
+                    <i class="fas fa-play"></i> 学習開始
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Run Detail Modal -->
+    <div id="runDetailModal" class="modal-overlay" style="display: none;">
+        <div class="modal-container" style="max-width: 850px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fas fa-chart-line" id="runDetailIcon"></i>
+                    <span id="runDetailTitle">ラン詳細</span>
+                </div>
+                <button class="modal-close" onclick="closeRunDetailModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="max-height: 75vh; overflow-y: auto;">
+                <!-- Basic Info -->
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="info-item">
+                        <span class="info-label">アルゴリズム</span>
+                        <span class="info-value" id="detailAlgorithm">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">データセット</span>
+                        <span class="info-value" id="detailDataset">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">目的変数</span>
+                        <span class="info-value" id="detailTarget">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">実行日時</span>
+                        <span class="info-value" id="detailDate">-</span>
+                    </div>
+                </div>
+
+                <!-- Training Section (type: train) -->
+                <div id="detailTrainSection">
+                    <h4 class="font-semibold mb-3">評価指標</h4>
+                    <div class="result-metrics mb-6">
+                        <div class="metric">
+                            <span class="metric-label">R² Score</span>
+                            <span class="metric-value" id="detailR2">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">RMSE</span>
+                            <span class="metric-value" id="detailRMSE">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">MAE</span>
+                            <span class="metric-value" id="detailMAE">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Variables Table -->
+                    <div id="detailVariablesSection" class="mb-4">
+                        <h4 class="font-semibold mb-3">説明変数・目的変数</h4>
+                        <div id="detailVariablesTable" class="opt-trials-table"></div>
+                    </div>
+
+                    <h4 class="font-semibold mb-3">特徴量重要度 (SHAP)</h4>
+                    <div id="shapChart" class="shap-chart mb-4">
+                        <!-- SHAP bar chart rendered here -->
+                    </div>
+                </div>
+
+                <!-- Optimization Section (type: optimize) -->
+                <div id="detailOptimizeSection" style="display: none;">
+                    <h4 class="font-semibold mb-3">最適化結果</h4>
+                    <div class="result-metrics mb-4">
+                        <div class="metric">
+                            <span class="metric-label">改善後 R²</span>
+                            <span class="metric-value" id="detailOptR2">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">元の R²</span>
+                            <span class="metric-value" id="detailOptOrigR2">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">改善率</span>
+                            <span class="metric-value" id="detailOptImprove">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">試行回数</span>
+                            <span class="metric-value" id="detailOptTrials">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Best Parameters -->
+                    <h4 class="font-semibold mb-3">最適パラメータ（説明変数の最適値）</h4>
+                    <div id="detailOptParams" class="opt-trials-table mb-4"></div>
+
+                    <!-- Optimization History Chart -->
+                    <h4 class="font-semibold mb-3">最適化履歴（スコア推移）</h4>
+                    <div class="yy-plot-container mb-4">
+                        <canvas id="detailOptHistoryCanvas" width="600" height="200"></canvas>
+                    </div>
+
+                    <!-- Pareto Plot (for multi-objective) -->
+                    <h4 class="font-semibold mb-3">パレートプロット</h4>
+                    <div class="yy-plot-container mb-4">
+                        <canvas id="detailParetoCanvas" width="600" height="250"></canvas>
+                    </div>
+
+                    <!-- Top Trials Table -->
+                    <h4 class="font-semibold mb-3">上位トライアル</h4>
+                    <div id="detailOptTrialsTable" class="opt-trials-table mb-4"></div>
+                </div>
+
+                <!-- Predict Section (type: predict) -->
+                <div id="detailPredictSection" style="display: none;">
+                    <h4 class="font-semibold mb-3">予測結果</h4>
+                    <div class="result-metrics mb-4">
+                        <div class="metric">
+                            <span class="metric-label">予測件数</span>
+                            <span class="metric-value" id="detailPredictCount">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex gap-2 mt-4">
+                    <button class="btn btn-secondary flex-1" onclick="exportRunCSV()">
+                        <i class="fas fa-download"></i> CSV出力
+                    </button>
+                    <button class="btn btn-primary flex-1" id="btnPredictFromDetail" onclick="openPredictWithModel()">
+                        <i class="fas fa-magic"></i> このモデルで予測
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Predict Modal -->
+    <div id="predictModal" class="modal-overlay" style="display: none;">
+        <div class="modal-container" style="max-width: 600px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fas fa-magic"></i>
+                    <span>予測実行</span>
+                </div>
+                <button class="modal-close" onclick="closePredictModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">使用するモデル</label>
+                    <select class="form-select" id="predictModelSelect" onchange="handlePredictModelSelect()">
+                        <option value="">モデルを選択してください</option>
+                    </select>
+                </div>
+                <!-- Model Info Display -->
+                <div id="predictModelInfo" class="dataset-info" style="display: none;">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">アルゴリズム</span>
+                            <span class="info-value" id="predictModelAlgo">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">R² Score</span>
+                            <span class="info-value" id="predictModelR2">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">目的変数</span>
+                            <span class="info-value" id="predictModelTarget">-</span>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <label class="form-label">必要な説明変数</label>
+                        <div id="predictFeatureList" class="feature-list-display"></div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">予測データ（CSV）</label>
+                    <div class="upload-area" id="predictUploadArea" onclick="document.getElementById('predictFileInput').click()">
+                        <i class="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-2"></i>
+                        <p class="text-gray-600">クリックまたはドラッグ&ドロップでCSVをアップロード</p>
+                        <input type="file" id="predictFileInput" accept=".csv,.xlsx" style="display: none;" onchange="handlePredictFile(event)">
+                    </div>
+                    <div id="predictFileInfo" class="mt-2" style="display: none;">
+                        <span class="text-sm text-gray-600" id="predictFileName"></span>
+                        <span class="text-sm text-gray-500" id="predictFileRows"></span>
+                        <div id="predictColumnMatch" class="mt-2"></div>
+                    </div>
+                </div>
+                <div id="predictResult" style="display: none;" class="training-result">
+                    <div class="result-header success">
+                        <i class="fas fa-check-circle"></i>
+                        予測完了
+                    </div>
+                    <div class="mt-4">
+                        <p class="text-sm text-gray-600 mb-2">予測結果: <span id="predictResultCount">0</span>件</p>
+                        <button class="btn btn-primary w-full" onclick="downloadPredictResult()">
+                            <i class="fas fa-download"></i> 予測結果をダウンロード
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closePredictModal()">キャンセル</button>
+                <button class="btn btn-primary" id="btnRunPredict" onclick="runPredict()">
+                    <i class="fas fa-play"></i> 予測実行
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Models Modal -->
+    <div id="modelsModal" class="modal-overlay" style="display: none;">
+        <div class="modal-container" style="max-width: 700px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fas fa-brain"></i>
+                    <span>保存済みモデル</span>
+                </div>
+                <button class="modal-close" onclick="closeModelsModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+                <div id="modelsList">
+                    <!-- Dynamic model list -->
+                </div>
+                <div id="modelsEmptyState" class="p-8 text-center text-gray-500" style="display: none;">
+                    <i class="fas fa-box-open text-4xl mb-4"></i>
+                    <p>保存済みモデルがありません。学習を実行するとモデルが保存されます。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Select Modal -->
+    <div id="taskSelectModal" class="modal-overlay" style="display: none;">
+        <div class="modal-container" style="max-width: 600px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fas fa-tasks"></i>
+                    <span>新規タスク</span>
+                </div>
+                <button class="modal-close" onclick="closeTaskSelectModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="text-gray-600 mb-4">実行するタスクの種類を選択してください</p>
+                <div class="task-options">
+                    <div class="task-option" onclick="selectTask('train')">
+                        <div class="task-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                            <i class="fas fa-graduation-cap"></i>
+                        </div>
+                        <div class="task-content">
+                            <div class="task-title">モデル学習</div>
+                            <div class="task-desc">データセットからMLモデルを学習します</div>
+                        </div>
+                        <i class="fas fa-chevron-right task-arrow"></i>
+                    </div>
+                    <div class="task-option" onclick="selectTask('predict')">
+                        <div class="task-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+                            <i class="fas fa-magic"></i>
+                        </div>
+                        <div class="task-content">
+                            <div class="task-title">予測実行</div>
+                            <div class="task-desc">学習済みモデルで新しいデータを予測します</div>
+                        </div>
+                        <i class="fas fa-chevron-right task-arrow"></i>
+                    </div>
+                    <div class="task-option" onclick="selectTask('optimize')">
+                        <div class="task-icon" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                            <i class="fas fa-bullseye"></i>
+                        </div>
+                        <div class="task-content">
+                            <div class="task-title">ハイパーパラメータ最適化</div>
+                            <div class="task-desc">Optunaで最適なパラメータを探索します</div>
+                        </div>
+                        <i class="fas fa-chevron-right task-arrow"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Optimize Modal -->
+    <div id="optimizeModal" class="modal-overlay" style="display: none;">
+        <div class="modal-container" style="max-width: 650px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fas fa-bullseye"></i>
+                    <span>ハイパーパラメータ最適化</span>
+                </div>
+                <button class="modal-close" onclick="closeOptimizeModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <!-- Step 1: Base Model Selection -->
+                <div id="optimizeStep1">
+                    <h3 class="step-title">ベースモデルを選択</h3>
+                    <div class="form-group">
+                        <label class="form-label">最適化対象のモデル</label>
+                        <select class="form-select" id="optimizeModelSelect" onchange="handleOptimizeModelSelect()">
+                            <option value="">モデルを選択してください</option>
+                        </select>
+                    </div>
+                    <div id="optimizeModelInfo" style="display: none;" class="dataset-info">
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <span class="info-label">アルゴリズム</span>
+                                <span class="info-value" id="optModelAlgo">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">現在のR²</span>
+                                <span class="info-value" id="optModelR2">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">データセット</span>
+                                <span class="info-value" id="optModelDataset">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Variable Range Settings -->
+                <div id="optimizeStep2" style="display: none;">
+                    <h3 class="step-title">目的変数の設定</h3>
+                    <div class="form-group">
+                        <label class="form-label">目的変数の最適化指標</label>
+                        <div id="optimizeTargetSettings">
+                            <div class="var-range-grid" style="grid-template-columns: 1fr 1fr 100px;">
+                                <span class="var-name" id="optTargetName">目的変数</span>
+                                <select class="form-select" id="optTargetType">
+                                    <option value="maximize">最大化</option>
+                                    <option value="minimize">最小化</option>
+                                    <option value="target">目標値</option>
+                                </select>
+                                <input type="number" id="optTargetValue" placeholder="目標値" style="display: none;">
+                            </div>
+                        </div>
+                    </div>
+                    <h3 class="step-title mt-4">説明変数の探索範囲</h3>
+                    <div class="form-hint mb-2">各変数の探索範囲を設定してください</div>
+                    <div id="optimizeVarRanges" style="max-height: 250px; overflow-y: auto;">
+                        <!-- Dynamic variable range inputs -->
+                    </div>
+                </div>
+
+                <!-- Step 3: Optimization Algorithm Settings -->
+                <div id="optimizeStep3" style="display: none;">
+                    <h3 class="step-title">最適化設定</h3>
+                    <div class="form-group">
+                        <label class="form-label">探索アルゴリズム</label>
+                        <select class="form-select" id="optimizeAlgorithm">
+                            <option value="tpe">TPE (Tree-structured Parzen Estimator)（推奨）</option>
+                            <option value="cmaes">CMA-ES（連続値向け）</option>
+                            <option value="nsga2">NSGA-II（多目的向け）</option>
+                            <option value="random">Random Search（ベースライン）</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label">試行回数</label>
+                            <input type="number" class="form-select" id="optimizeTrials" value="50" min="10" max="500">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">タイムアウト (秒)</label>
+                            <input type="number" class="form-select" id="optimizeTimeout" value="300" min="60" max="3600">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">最適化目標</label>
+                        <select class="form-select" id="optimizeObjective">
+                            <option value="r2">R² Score (最大化)</option>
+                            <option value="rmse">RMSE (最小化)</option>
+                            <option value="mae">MAE (最小化)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Progress -->
+                <div id="optimizeProgress" style="display: none;" class="training-progress">
+                    <div class="progress-header">
+                        <span>最適化中...</span>
+                        <span id="optimizeProgressPercent">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="optimizeProgressFill" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-log" id="optimizeProgressLog"></div>
+                    <div class="mt-4">
+                        <div class="text-sm text-gray-600">現在のベストスコア</div>
+                        <div class="text-2xl font-bold text-primary" id="optimizeBestScore">-</div>
+                    </div>
+                </div>
+
+                <!-- Result -->
+                <div id="optimizeResult" style="display: none;" class="training-result">
+                    <div class="result-header success">
+                        <i class="fas fa-check-circle"></i>
+                        最適化完了
+                    </div>
+                    <div class="result-metrics">
+                        <div class="metric">
+                            <span class="metric-label">改善後 R²</span>
+                            <span class="metric-value" id="optResultR2">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">改善率</span>
+                            <span class="metric-value" id="optResultImprove">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">試行回数</span>
+                            <span class="metric-value" id="optResultTrials">-</span>
+                        </div>
+                    </div>
+                    <!-- Best Parameters -->
+                    <div class="mt-4">
+                        <h4 class="font-semibold mb-2">最適パラメータ</h4>
+                        <div id="optResultParams" class="progress-log" style="max-height: 120px;"></div>
+                    </div>
+                    <!-- Optimization History Chart -->
+                    <div class="mt-4">
+                        <h4 class="font-semibold mb-2">最適化履歴（スコア推移）</h4>
+                        <div class="yy-plot-container">
+                            <canvas id="optHistoryCanvas" width="500" height="180"></canvas>
+                        </div>
+                    </div>
+                    <!-- Trial Results Table -->
+                    <div class="mt-4">
+                        <h4 class="font-semibold mb-2">上位トライアル</h4>
+                        <div id="optTrialsTable" class="opt-trials-table"></div>
+                    </div>
+                    <!-- Actions -->
+                    <div class="mt-4 flex gap-2">
+                        <button class="btn btn-primary flex-1" onclick="downloadOptimizeResult()">
+                            <i class="fas fa-download"></i> 結果をダウンロード
+                        </button>
+                        <button class="btn btn-secondary flex-1" onclick="applyOptimizedModel()">
+                            <i class="fas fa-check"></i> モデルに適用
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btnOptimizeBack" onclick="optimizeBack()" style="display: none;">
+                    <i class="fas fa-arrow-left"></i> 戻る
+                </button>
+                <button class="btn btn-secondary" onclick="closeOptimizeModal()">キャンセル</button>
+                <button class="btn btn-primary" id="btnOptimizeNext" onclick="optimizeNext()">
+                    次へ <i class="fas fa-arrow-right"></i>
+                </button>
+                <button class="btn btn-agent" id="btnStartOptimize" onclick="startOptimize()" style="display: none;">
+                    <i class="fas fa-play"></i> 最適化開始
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast" style="display: none;">
+        <i class="fas fa-check-circle text-green-400"></i>
+        <span id="toastMessage">ランを開始しました</span>
+    </div>
+
+    <!-- Refactored: External JavaScript -->
+    <script src="/js/ml-app.js" onerror="document.body.innerHTML='<h1 style=color:red>ml-app.js failed to load</h1>'"></script>
+</body>
+</html>

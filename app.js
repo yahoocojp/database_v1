@@ -5,6 +5,10 @@
 
 var express = require('express');
 var path = require('path');
+var fs = require('fs');
+var http = require('http');
+var socketIO = require('socket.io');
+var MLClient = require('./lib/ml-client');
 
 // Sample Data (ASCII compatible keys)
 var sampleData = {
@@ -119,6 +123,9 @@ function buildGraphData() {
     });
 
     // Product nodes + edges
+    // Track Material→HeatTreatment edges to avoid duplicates
+    var matHeatEdges = {};
+
     sampleData.products.forEach(function(p) {
         nodes.push({
             id: p.id,
@@ -129,8 +136,23 @@ function buildGraphData() {
             properties: p
         });
 
-        edges.push({ from: p.materialId, to: p.id });
-        edges.push({ from: p.heatTreatId, to: p.id });
+        // Edge logic: Material → HeatTreatment → Product (when both exist)
+        if (p.materialId && p.heatTreatId) {
+            // Material → HeatTreatment (only add once per pair)
+            var matHeatKey = p.materialId + '-' + p.heatTreatId;
+            if (!matHeatEdges[matHeatKey]) {
+                edges.push({ from: p.materialId, to: p.heatTreatId });
+                matHeatEdges[matHeatKey] = true;
+            }
+            // HeatTreatment → Product
+            edges.push({ from: p.heatTreatId, to: p.id });
+        } else if (p.materialId) {
+            // Only Material → Product
+            edges.push({ from: p.materialId, to: p.id });
+        } else if (p.heatTreatId) {
+            // Only HeatTreatment → Product
+            edges.push({ from: p.heatTreatId, to: p.id });
+        }
     });
 
     // Test piece nodes + edges
@@ -172,8 +194,16 @@ function buildGraphData() {
 var app = express();
 var PORT = process.env.PORT || 8000;
 
-// Static files from root
+// HTTPサーバー作成（Socket.IO用）
+var server = http.createServer(app);
+var io = socketIO(server);
+
+// MLクライアント初期化
+var mlClient = new MLClient();
+
+// Static files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/lib', express.static(path.join(__dirname, 'lib')));
 app.use(express.json());
 
 // Root route
@@ -187,9 +217,11 @@ app.get('/', function(req, res) {
 
 // Health check
 app.get('/health', function(req, res) {
-    res.json({ 
-        status: 'ok', 
+    res.json({
+        status: 'ok',
         mode: 'sample-data',
+        version: '1.0.1',
+        message: 'Claude Code から更新しました！',
         timestamp: new Date().toISOString()
     });
 });
@@ -360,9 +392,9 @@ app.get('/api/trace/:id', function(req, res) {
     // Start tracing
     visited = {};
     traceUpstream(id);
-    
+
     visited = {};
-    visited[id] = true; // Don't include starting node
+    // Don't mark starting node as visited before calling traceDownstream
     traceDownstream(id);
     
     // Remove duplicates
@@ -412,9 +444,265 @@ app.post('/api/search', function(req, res) {
     res.json(results);
 });
 
+// ========================================
+// ML API Endpoints
+// ========================================
+
+// ML Service健康チェック
+app.get('/api/ml/health', async function(req, res) {
+    try {
+        const health = await mlClient.healthCheck();
+        res.json(health);
+    } catch (error) {
+        res.status(503).json({
+            status: 'ML Service unavailable',
+            error: error.message
+        });
+    }
+});
+
+// 学習開始
+app.post('/api/ml/train', async function(req, res) {
+    try {
+        const result = await mlClient.trainModel(req.body);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 予測実行
+app.post('/api/ml/predict', async function(req, res) {
+    try {
+        const result = await mlClient.predictModel(req.body);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 最適化実行
+app.post('/api/ml/optimize', async function(req, res) {
+    try {
+        const result = await mlClient.optimizeModel(req.body);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ステータス取得
+app.get('/api/ml/status/:runId', async function(req, res) {
+    try {
+        const status = await mlClient.getStatus(req.params.runId);
+        res.json(status);
+    } catch (error) {
+        res.status(404).json({ error: error.message });
+    }
+});
+
+// ========================================
+// Dataset File API
+// ========================================
+const DATASET_DIR = path.join(__dirname, 'ml_service', 'data', 'datasets');
+
+// Ensure dataset directory exists
+if (!fs.existsSync(DATASET_DIR)) {
+    fs.mkdirSync(DATASET_DIR, { recursive: true });
+}
+
+// Save dataset to file
+app.post('/api/datasets/save', function(req, res) {
+    try {
+        const { name, data, columns } = req.body;
+
+        if (!name || !data) {
+            return res.status(400).json({ error: 'Name and data are required' });
+        }
+
+        // Sanitize filename
+        const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const filePath = path.join(DATASET_DIR, safeName + '.csv');
+
+        // Convert data to CSV
+        let csvContent = '';
+        if (columns && columns.length > 0) {
+            csvContent = columns.join(',') + '\n';
+        }
+
+        if (Array.isArray(data)) {
+            data.forEach(function(row) {
+                if (Array.isArray(row)) {
+                    csvContent += row.join(',') + '\n';
+                } else if (typeof row === 'object') {
+                    const values = columns ? columns.map(c => row[c] || '') : Object.values(row);
+                    csvContent += values.join(',') + '\n';
+                }
+            });
+        }
+
+        fs.writeFileSync(filePath, csvContent, 'utf-8');
+
+        console.log('[Dataset] Saved:', safeName + '.csv');
+        res.json({
+            success: true,
+            name: safeName,
+            path: filePath,
+            rows: data.length
+        });
+
+    } catch (error) {
+        console.error('[Dataset] Save error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// List saved datasets
+app.get('/api/datasets/list', function(req, res) {
+    try {
+        const files = fs.readdirSync(DATASET_DIR)
+            .filter(f => f.endsWith('.csv'))
+            .map(f => {
+                const stats = fs.statSync(path.join(DATASET_DIR, f));
+                return {
+                    name: f.replace('.csv', ''),
+                    filename: f,
+                    size: stats.size,
+                    modified: stats.mtime
+                };
+            });
+
+        res.json({ datasets: files });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get dataset content
+app.get('/api/datasets/:name', function(req, res) {
+    try {
+        const safeName = req.params.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const filePath = path.join(DATASET_DIR, safeName + '.csv');
+
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: 'Dataset not found' });
+        }
+
+        const content = fs.readFileSync(filePath, 'utf-8');
+        res.type('text/csv').send(content);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Delete dataset
+app.delete('/api/datasets/:name', function(req, res) {
+    try {
+        const safeName = req.params.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const filePath = path.join(DATASET_DIR, safeName + '.csv');
+
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ error: 'Dataset not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ========================================
+// Error Logging API (Phase 1A++)
+// ========================================
+
+// クライアントエラーログ収集
+app.post('/api/errors', function(req, res) {
+    const errorLog = req.body;
+
+    // コンソールにログ出力
+    console.error('[Client Error]', {
+        timestamp: errorLog.timestamp,
+        name: errorLog.name,
+        message: errorLog.message,
+        url: errorLog.url,
+        environment: errorLog.environment,
+        sessionId: errorLog.sessionId
+    });
+
+    // スタックトレースは別途出力（長いため）
+    if (errorLog.stack) {
+        console.error('[Stack Trace]', errorLog.stack);
+    }
+
+    // 開発環境では詳細を出力
+    if (process.env.NODE_ENV !== 'production') {
+        console.error('[Error Context]', errorLog.context);
+    }
+
+    // TODO: 本番環境ではDatabricksに保存
+    // if (process.env.NODE_ENV === 'production') {
+    //     await saveToDatabricks(errorLog);
+    // }
+
+    res.json({ success: true, logged: true });
+});
+
+// ========================================
+// WebSocket Server
+// ========================================
+
+io.on('connection', function(socket) {
+    console.log('[WebSocket] Browser client connected: ' + socket.id);
+
+    // Python MLサービスのWebSocketに接続
+    mlClient.connectWebSocket({
+        onTrainingProgress: function(data) {
+            socket.emit('training_progress', data);
+        },
+        onTrainingComplete: function(data) {
+            socket.emit('training_complete', data);
+        },
+        onTrainingError: function(data) {
+            socket.emit('training_error', data);
+        },
+        onPredictionProgress: function(data) {
+            socket.emit('prediction_progress', data);
+        },
+        onPredictionComplete: function(data) {
+            socket.emit('prediction_complete', data);
+        },
+        onPredictionError: function(data) {
+            socket.emit('prediction_error', data);
+        },
+        onOptimizationProgress: function(data) {
+            socket.emit('optimization_progress', data);
+        },
+        onOptimizationComplete: function(data) {
+            socket.emit('optimization_complete', data);
+        },
+        onOptimizationError: function(data) {
+            socket.emit('optimization_error', data);
+        }
+    });
+
+    socket.on('disconnect', function() {
+        console.log('[WebSocket] Browser client disconnected: ' + socket.id);
+    });
+
+    socket.on('ping', function() {
+        socket.emit('pong', { timestamp: new Date().toISOString() });
+    });
+});
+
 // Start server
-app.listen(PORT, function() {
+server.listen(PORT, function() {
+    console.log('========================================');
     console.log('R&D Experiment Manager (Sample Data Mode)');
     console.log('Server running on port ' + PORT);
+    console.log('Started at: ' + new Date().toISOString());
     console.log('Data: ' + sampleData.materials.length + ' materials, ' + sampleData.testPieces.length + ' test pieces');
+    console.log('WebSocket: Enabled');
+    console.log('ML Service: http://localhost:5000');
+    console.log('========================================');
 });
