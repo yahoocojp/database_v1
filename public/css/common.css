@@ -101,6 +101,11 @@ body {
 .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    pointer-events: none;
+}
+
+.btn:not(:disabled) {
+    cursor: pointer;
 }
 
 .btn-primary {

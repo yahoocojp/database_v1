@@ -3536,6 +3536,7 @@ function openDatasetForEdit(index) {
     document.getElementById('btnSaveDataset').disabled = true;
 
     renderEditableTable();
+    updateRowCountDisplay();
 
     var modal = document.getElementById('datasetEditModal');
     modal.style.display = 'flex';
@@ -4041,7 +4042,226 @@ function restoreVersion(versionIndex) {
     closeVersionHistory();
     renderEditableTable();
     updateEditStatus();
+    updateRowCountDisplay();
     refreshDatasets();
 
     showToast('バージョン ' + version.version + ' に復元しました', 'success');
+}
+
+// ============================================
+// Row Add & Data Append Functions
+// ============================================
+
+var appendFileData = null;
+
+function updateRowCountDisplay() {
+    var display = document.getElementById('rowCountDisplay');
+    if (display && editingDataset) {
+        display.textContent = editingDataset.data.length + ' 行';
+    }
+}
+
+function addNewRow() {
+    if (!editingDataset) return;
+
+    // Create empty row with all columns
+    var newRow = {};
+    editingDataset.columns.forEach(function(col) {
+        newRow[col] = '';
+    });
+
+    // Add to data
+    editingDataset.data.push(newRow);
+    editingDataset.rows = editingDataset.data.length;
+
+    // Mark as change
+    var rowIdx = editingDataset.data.length - 1;
+    editingDataset.columns.forEach(function(col) {
+        var cellKey = rowIdx + '_' + col;
+        pendingChanges[cellKey] = { row: rowIdx, col: col, oldValue: undefined, newValue: '', isNewRow: true };
+    });
+
+    renderEditableTable();
+    updateEditStatus();
+    updateRowCountDisplay();
+
+    // Scroll to bottom
+    var tableContainer = document.querySelector('#datasetEditModal .modal-body > div:last-child > div:first-child');
+    if (tableContainer) {
+        tableContainer.scrollTop = tableContainer.scrollHeight;
+    }
+
+    showToast('新しい行を追加しました', 'info');
+}
+
+// Append Data Modal
+function openAppendDataModal() {
+    clearAppendData();
+    var modal = document.getElementById('appendDataModal');
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+}
+
+function closeAppendDataModal() {
+    var modal = document.getElementById('appendDataModal');
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+    clearAppendData();
+}
+
+function clearAppendData() {
+    appendFileData = null;
+    document.getElementById('appendFileInput').value = '';
+    document.getElementById('appendDropzone').style.display = 'block';
+    document.getElementById('appendPreview').style.display = 'none';
+    document.getElementById('btnConfirmAppend').disabled = true;
+}
+
+function handleAppendDragOver(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    document.getElementById('appendDropzone').classList.add('upload-dropzone-active');
+}
+
+function handleAppendDragLeave(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    document.getElementById('appendDropzone').classList.remove('upload-dropzone-active');
+}
+
+function handleAppendDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    document.getElementById('appendDropzone').classList.remove('upload-dropzone-active');
+
+    var files = event.dataTransfer.files;
+    if (files.length > 0) {
+        processAppendFile(files[0]);
+    }
+}
+
+function handleAppendFileSelect(event) {
+    var files = event.target.files;
+    if (files.length > 0) {
+        processAppendFile(files[0]);
+    }
+}
+
+function processAppendFile(file) {
+    if (!file.name.endsWith('.csv')) {
+        showToast('CSVファイルを選択してください', 'error');
+        return;
+    }
+
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        parseAppendCSV(e.target.result);
+    };
+    reader.readAsText(file);
+}
+
+function parseAppendCSV(content) {
+    var lines = content.split('\n').filter(function(line) { return line.trim() !== ''; });
+    if (lines.length < 2) {
+        showToast('データが不足しています', 'error');
+        return;
+    }
+
+    var headers = parseCSVLine(lines[0]);
+
+    // Validate columns match
+    if (!editingDataset) return;
+
+    var missingCols = editingDataset.columns.filter(function(col) {
+        return !headers.includes(col);
+    });
+
+    var extraCols = headers.filter(function(col) {
+        return !editingDataset.columns.includes(col);
+    });
+
+    if (missingCols.length > 0) {
+        showToast('カラムが不足しています: ' + missingCols.join(', '), 'error');
+        return;
+    }
+
+    if (extraCols.length > 0) {
+        showToast('余分なカラムがあります: ' + extraCols.join(', ') + ' (無視されます)', 'warning');
+    }
+
+    // Parse data rows
+    var data = [];
+    for (var i = 1; i < lines.length; i++) {
+        var values = parseCSVLine(lines[i]);
+        var row = {};
+        editingDataset.columns.forEach(function(col) {
+            var colIdx = headers.indexOf(col);
+            row[col] = colIdx >= 0 ? (values[colIdx] || '') : '';
+        });
+        data.push(row);
+    }
+
+    appendFileData = data;
+    showAppendPreview();
+}
+
+function showAppendPreview() {
+    document.getElementById('appendDropzone').style.display = 'none';
+    document.getElementById('appendPreview').style.display = 'block';
+    document.getElementById('appendRowCount').textContent = appendFileData.length;
+
+    var tableHtml = '<thead><tr>';
+    editingDataset.columns.slice(0, 5).forEach(function(col) {
+        tableHtml += '<th>' + escapeHtml(col) + '</th>';
+    });
+    if (editingDataset.columns.length > 5) {
+        tableHtml += '<th>...</th>';
+    }
+    tableHtml += '</tr></thead><tbody>';
+
+    var previewRows = appendFileData.slice(0, 3);
+    previewRows.forEach(function(row) {
+        tableHtml += '<tr>';
+        editingDataset.columns.slice(0, 5).forEach(function(col) {
+            tableHtml += '<td>' + escapeHtml(String(row[col] || '')) + '</td>';
+        });
+        if (editingDataset.columns.length > 5) {
+            tableHtml += '<td>...</td>';
+        }
+        tableHtml += '</tr>';
+    });
+
+    if (appendFileData.length > 3) {
+        var colSpan = Math.min(editingDataset.columns.length, 5) + (editingDataset.columns.length > 5 ? 1 : 0);
+        tableHtml += '<tr><td colspan="' + colSpan + '" style="text-align: center; color: #9ca3af; font-style: italic;">... 他 ' + (appendFileData.length - 3) + ' 行</td></tr>';
+    }
+    tableHtml += '</tbody>';
+
+    document.getElementById('appendPreviewTable').innerHTML = tableHtml;
+    document.getElementById('btnConfirmAppend').disabled = false;
+}
+
+function confirmAppendData() {
+    if (!appendFileData || appendFileData.length === 0 || !editingDataset) return;
+
+    var startRowIdx = editingDataset.data.length;
+
+    // Append data
+    appendFileData.forEach(function(row, i) {
+        editingDataset.data.push(row);
+        // Mark all cells as changed
+        editingDataset.columns.forEach(function(col) {
+            var cellKey = (startRowIdx + i) + '_' + col;
+            pendingChanges[cellKey] = { row: startRowIdx + i, col: col, oldValue: undefined, newValue: row[col], isNewRow: true };
+        });
+    });
+
+    editingDataset.rows = editingDataset.data.length;
+
+    closeAppendDataModal();
+    renderEditableTable();
+    updateEditStatus();
+    updateRowCountDisplay();
+
+    showToast(appendFileData.length + ' 行を追記しました', 'success');
 }
