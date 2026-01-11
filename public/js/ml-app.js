@@ -640,8 +640,10 @@ function renderDatasetTable(container) {
         html += '<td><span class="text-sm text-gray-600">' + dataset.columns.length + '</span></td>';
         html += '<td><span class="text-sm text-gray-600">' + dateStr + '</span></td>';
         html += '<td><div class="flex items-center gap-2">';
-        html += '<button class="btn btn-ghost btn-sm" onclick="viewDataset(' + index + ')"><i class="fas fa-eye"></i> プレビュー</button>';
-        html += '<button class="btn btn-ghost btn-sm" onclick="useDatasetForML(' + index + ')"><i class="fas fa-play"></i> 使用</button>';
+        html += '<button class="btn btn-ghost btn-sm" onclick="viewDataset(' + index + ')" title="プレビュー"><i class="fas fa-eye"></i></button>';
+        html += '<button class="btn btn-ghost btn-sm" onclick="openDatasetForEdit(' + index + ')" title="編集"><i class="fas fa-edit"></i></button>';
+        html += '<button class="btn btn-ghost btn-sm" onclick="useDatasetForML(' + index + ')" title="ML学習に使用"><i class="fas fa-play"></i></button>';
+        html += '<button class="btn btn-ghost btn-sm" onclick="exportDataset(' + index + ')" title="エクスポート"><i class="fas fa-download"></i></button>';
         html += '<button class="btn btn-ghost btn-sm" onclick="deleteDataset(' + index + ')"><i class="fas fa-trash"></i></button>';
         html += '</div></td>';
         html += '</tr>';
@@ -3098,3 +3100,474 @@ document.addEventListener('DOMContentLoaded', function() {
         initMLWebSocket();
     }
 });
+
+// ============================================
+// Dataset Upload & Edit Functions
+// ============================================
+
+var uploadedFileData = null;
+var editingDataset = null;
+var editingDatasetOriginal = null;
+var pendingChanges = {};
+
+// Upload Modal
+function openUploadModal() {
+    var modal = document.getElementById('uploadModal');
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+    clearUpload();
+}
+
+function closeUploadModal() {
+    var modal = document.getElementById('uploadModal');
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+    clearUpload();
+}
+
+function clearUpload() {
+    uploadedFileData = null;
+    document.getElementById('fileInput').value = '';
+    document.getElementById('uploadDropzone').style.display = 'block';
+    document.getElementById('uploadPreview').style.display = 'none';
+    document.getElementById('btnConfirmUpload').disabled = true;
+}
+
+function handleDragOver(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    document.getElementById('uploadDropzone').classList.add('upload-dropzone-active');
+}
+
+function handleDragLeave(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    document.getElementById('uploadDropzone').classList.remove('upload-dropzone-active');
+}
+
+function handleDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    document.getElementById('uploadDropzone').classList.remove('upload-dropzone-active');
+
+    var files = event.dataTransfer.files;
+    if (files.length > 0) {
+        processFile(files[0]);
+    }
+}
+
+function handleFileSelect(event) {
+    var files = event.target.files;
+    if (files.length > 0) {
+        processFile(files[0]);
+    }
+}
+
+function processFile(file) {
+    var validTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+    var validExtensions = ['.csv', '.xls', '.xlsx'];
+
+    var ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    if (!validExtensions.includes(ext)) {
+        showToast('対応していないファイル形式です。CSV または Excel ファイルを選択してください。', 'error');
+        return;
+    }
+
+    var reader = new FileReader();
+
+    if (ext === '.csv') {
+        reader.onload = function(e) {
+            parseCSV(e.target.result, file.name);
+        };
+        reader.readAsText(file);
+    } else {
+        showToast('Excel ファイルの読み込みには追加ライブラリが必要です。CSV ファイルを使用してください。', 'warning');
+    }
+}
+
+function parseCSV(content, fileName) {
+    var lines = content.split('\n').filter(function(line) { return line.trim() !== ''; });
+    if (lines.length < 2) {
+        showToast('データが不足しています。ヘッダーと少なくとも1行のデータが必要です。', 'error');
+        return;
+    }
+
+    var headers = parseCSVLine(lines[0]);
+    var data = [];
+
+    for (var i = 1; i < lines.length; i++) {
+        var values = parseCSVLine(lines[i]);
+        var row = {};
+        headers.forEach(function(header, idx) {
+            row[header] = values[idx] || '';
+        });
+        data.push(row);
+    }
+
+    uploadedFileData = {
+        name: fileName.replace(/\.[^/.]+$/, ''),
+        columns: headers,
+        data: data,
+        rows: data.length
+    };
+
+    showUploadPreview();
+}
+
+function parseCSVLine(line) {
+    var result = [];
+    var current = '';
+    var inQuotes = false;
+
+    for (var i = 0; i < line.length; i++) {
+        var char = line[i];
+        if (char === '"') {
+            inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    result.push(current.trim());
+    return result;
+}
+
+function showUploadPreview() {
+    document.getElementById('uploadDropzone').style.display = 'none';
+    document.getElementById('uploadPreview').style.display = 'block';
+    document.getElementById('previewFileName').textContent = uploadedFileData.name;
+    document.getElementById('previewFileInfo').textContent = uploadedFileData.rows + '行 × ' + uploadedFileData.columns.length + '列';
+
+    var tableHtml = '<thead><tr>';
+    uploadedFileData.columns.forEach(function(col) {
+        tableHtml += '<th>' + escapeHtml(col) + '</th>';
+    });
+    tableHtml += '</tr></thead><tbody>';
+
+    var previewRows = uploadedFileData.data.slice(0, 5);
+    previewRows.forEach(function(row) {
+        tableHtml += '<tr>';
+        uploadedFileData.columns.forEach(function(col) {
+            tableHtml += '<td>' + escapeHtml(String(row[col] || '')) + '</td>';
+        });
+        tableHtml += '</tr>';
+    });
+
+    if (uploadedFileData.data.length > 5) {
+        tableHtml += '<tr><td colspan="' + uploadedFileData.columns.length + '" style="text-align: center; color: #9ca3af; font-style: italic;">... 他 ' + (uploadedFileData.data.length - 5) + ' 行</td></tr>';
+    }
+    tableHtml += '</tbody>';
+
+    document.getElementById('uploadPreviewTable').innerHTML = tableHtml;
+    document.getElementById('btnConfirmUpload').disabled = false;
+}
+
+function confirmUpload() {
+    if (!uploadedFileData) return;
+
+    var newDataset = {
+        id: 'ds_' + Date.now(),
+        name: uploadedFileData.name,
+        columns: uploadedFileData.columns,
+        data: uploadedFileData.data,
+        rows: uploadedFileData.rows,
+        createdAt: new Date().toISOString(),
+        versions: [{
+            version: 1,
+            createdAt: new Date().toISOString(),
+            description: '初回インポート',
+            data: JSON.parse(JSON.stringify(uploadedFileData.data))
+        }]
+    };
+
+    var storedDatasets = JSON.parse(localStorage.getItem('mlapp_datasets_all') || '[]');
+    storedDatasets.push(newDataset);
+    localStorage.setItem('mlapp_datasets_all', JSON.stringify(storedDatasets));
+
+    saveDatasetToServer(newDataset);
+
+    showToast('データセット「' + newDataset.name + '」をインポートしました', 'success');
+    closeUploadModal();
+    refreshDatasets();
+}
+
+// Dataset Edit Modal
+function openDatasetForEdit(index) {
+    var storedDatasets = JSON.parse(localStorage.getItem('mlapp_datasets_all') || '[]');
+    var dataset = storedDatasets[index];
+    if (!dataset) return;
+
+    editingDataset = JSON.parse(JSON.stringify(dataset));
+    editingDatasetOriginal = JSON.parse(JSON.stringify(dataset));
+    pendingChanges = {};
+
+    document.getElementById('editModalTitle').textContent = dataset.name;
+    document.getElementById('editModalSubtitle').textContent = 'ダブルクリックでセルを編集 • ' + dataset.rows + '行 × ' + dataset.columns.length + '列';
+    document.getElementById('editStatus').textContent = '変更なし';
+    document.getElementById('btnSaveDataset').disabled = true;
+
+    renderEditableTable();
+
+    var modal = document.getElementById('datasetEditModal');
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+}
+
+function closeDatasetEditModal() {
+    var changeCount = Object.keys(pendingChanges).length;
+    if (changeCount > 0) {
+        if (!confirm('保存されていない変更が ' + changeCount + ' 件あります。破棄しますか？')) {
+            return;
+        }
+    }
+
+    var modal = document.getElementById('datasetEditModal');
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+    editingDataset = null;
+    editingDatasetOriginal = null;
+    pendingChanges = {};
+}
+
+function renderEditableTable() {
+    var table = document.getElementById('editableDataTable');
+    var html = '<thead><tr><th class="row-number">#</th>';
+
+    editingDataset.columns.forEach(function(col) {
+        html += '<th>' + escapeHtml(col) + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    editingDataset.data.forEach(function(row, rowIdx) {
+        html += '<tr><td class="row-number">' + (rowIdx + 1) + '</td>';
+        editingDataset.columns.forEach(function(col) {
+            var cellKey = rowIdx + '_' + col;
+            var isModified = pendingChanges[cellKey] !== undefined;
+            var value = row[col];
+            html += '<td data-row="' + rowIdx + '" data-col="' + escapeHtml(col) + '"' +
+                    (isModified ? ' class="modified"' : '') +
+                    ' ondblclick="startCellEdit(this)">' +
+                    escapeHtml(String(value !== undefined && value !== null ? value : '')) + '</td>';
+        });
+        html += '</tr>';
+    });
+    html += '</tbody>';
+
+    table.innerHTML = html;
+}
+
+function startCellEdit(td) {
+    if (td.classList.contains('editing')) return;
+
+    var currentValue = td.textContent;
+    var rowIdx = parseInt(td.dataset.row);
+    var col = td.dataset.col;
+
+    td.classList.add('editing');
+    td.innerHTML = '<input type="text" value="' + escapeHtml(currentValue) + '" ' +
+                   'onblur="finishCellEdit(this, ' + rowIdx + ', \'' + escapeHtml(col) + '\')" ' +
+                   'onkeydown="handleCellKeydown(event, this, ' + rowIdx + ', \'' + escapeHtml(col) + '\')">';
+
+    var input = td.querySelector('input');
+    input.focus();
+    input.select();
+}
+
+function handleCellKeydown(event, input, rowIdx, col) {
+    if (event.key === 'Enter') {
+        finishCellEdit(input, rowIdx, col);
+    } else if (event.key === 'Escape') {
+        cancelCellEdit(input.parentElement, rowIdx, col);
+    } else if (event.key === 'Tab') {
+        event.preventDefault();
+        finishCellEdit(input, rowIdx, col);
+        moveToNextCell(input.parentElement, event.shiftKey);
+    }
+}
+
+function finishCellEdit(input, rowIdx, col) {
+    var td = input.parentElement;
+    var newValue = input.value;
+    var originalValue = editingDatasetOriginal.data[rowIdx][col];
+
+    td.classList.remove('editing');
+    td.textContent = newValue;
+
+    var cellKey = rowIdx + '_' + col;
+
+    if (String(newValue) !== String(originalValue || '')) {
+        pendingChanges[cellKey] = { row: rowIdx, col: col, oldValue: originalValue, newValue: newValue };
+        td.classList.add('modified');
+        editingDataset.data[rowIdx][col] = newValue;
+    } else {
+        delete pendingChanges[cellKey];
+        td.classList.remove('modified');
+        editingDataset.data[rowIdx][col] = originalValue;
+    }
+
+    updateEditStatus();
+}
+
+function cancelCellEdit(td, rowIdx, col) {
+    td.classList.remove('editing');
+    td.textContent = editingDataset.data[rowIdx][col] || '';
+}
+
+function moveToNextCell(currentTd, backwards) {
+    var cells = document.querySelectorAll('#editableDataTable td[data-row]');
+    var cellArray = Array.from(cells);
+    var currentIndex = cellArray.indexOf(currentTd);
+
+    var nextIndex = backwards ? currentIndex - 1 : currentIndex + 1;
+    if (nextIndex >= 0 && nextIndex < cellArray.length) {
+        startCellEdit(cellArray[nextIndex]);
+    }
+}
+
+function updateEditStatus() {
+    var changeCount = Object.keys(pendingChanges).length;
+    var statusEl = document.getElementById('editStatus');
+    var saveBtn = document.getElementById('btnSaveDataset');
+
+    if (changeCount === 0) {
+        statusEl.textContent = '変更なし';
+        statusEl.style.color = '#6b7280';
+        saveBtn.disabled = true;
+    } else {
+        statusEl.innerHTML = '<i class="fas fa-edit"></i> ' + changeCount + ' 件の変更';
+        statusEl.style.color = '#10b981';
+        saveBtn.disabled = false;
+    }
+}
+
+function saveDatasetChanges() {
+    var changeCount = Object.keys(pendingChanges).length;
+    if (changeCount === 0) return;
+
+    // Create new version
+    var versions = editingDataset.versions || [];
+    var newVersion = {
+        version: versions.length + 1,
+        createdAt: new Date().toISOString(),
+        description: changeCount + ' 件のセルを変更',
+        data: JSON.parse(JSON.stringify(editingDataset.data))
+    };
+    versions.push(newVersion);
+    editingDataset.versions = versions;
+
+    // Update in localStorage
+    var storedDatasets = JSON.parse(localStorage.getItem('mlapp_datasets_all') || '[]');
+    var idx = storedDatasets.findIndex(function(d) { return d.id === editingDataset.id; });
+    if (idx !== -1) {
+        storedDatasets[idx] = editingDataset;
+        localStorage.setItem('mlapp_datasets_all', JSON.stringify(storedDatasets));
+    }
+
+    // Save to server
+    saveDatasetToServer(editingDataset);
+
+    showToast('データセットを保存しました（バージョン ' + newVersion.version + '）', 'success');
+
+    // Reset state
+    editingDatasetOriginal = JSON.parse(JSON.stringify(editingDataset));
+    pendingChanges = {};
+    updateEditStatus();
+    renderEditableTable();
+    refreshDatasets();
+}
+
+// Version History
+function openVersionHistory() {
+    if (!editingDataset || !editingDataset.versions) {
+        showToast('バージョン履歴がありません', 'info');
+        return;
+    }
+
+    var versions = editingDataset.versions;
+    var html = '';
+
+    versions.slice().reverse().forEach(function(v, idx) {
+        var isCurrent = idx === 0;
+        var date = new Date(v.createdAt);
+
+        html += '<div class="version-item' + (isCurrent ? ' current' : '') + '">';
+        html += '<div>';
+        html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
+        html += '<span style="font-weight: 600;">バージョン ' + v.version + '</span>';
+        if (isCurrent) {
+            html += '<span class="version-badge current"><i class="fas fa-check"></i> 現在</span>';
+        }
+        html += '</div>';
+        html += '<div style="font-size: 12px; color: #6b7280;">' + v.description + '</div>';
+        html += '<div style="font-size: 11px; color: #9ca3af; margin-top: 4px;">' + date.toLocaleString('ja-JP') + '</div>';
+        html += '</div>';
+        if (!isCurrent) {
+            html += '<button class="btn btn-ghost" onclick="restoreVersion(' + (versions.length - 1 - idx) + ')">';
+            html += '<i class="fas fa-undo"></i> 復元';
+            html += '</button>';
+        }
+        html += '</div>';
+    });
+
+    if (versions.length === 0) {
+        html = '<div style="text-align: center; color: #9ca3af; padding: 32px;">バージョン履歴がありません</div>';
+    }
+
+    document.getElementById('versionHistoryList').innerHTML = html;
+
+    var modal = document.getElementById('versionHistoryModal');
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+}
+
+function closeVersionHistory() {
+    var modal = document.getElementById('versionHistoryModal');
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+}
+
+function restoreVersion(versionIndex) {
+    if (!editingDataset || !editingDataset.versions) return;
+
+    var version = editingDataset.versions[versionIndex];
+    if (!version) return;
+
+    if (!confirm('バージョン ' + version.version + ' に復元しますか？\n現在の変更は破棄されます。')) {
+        return;
+    }
+
+    // Create restore version
+    var versions = editingDataset.versions;
+    var newVersion = {
+        version: versions.length + 1,
+        createdAt: new Date().toISOString(),
+        description: 'バージョン ' + version.version + ' から復元',
+        data: JSON.parse(JSON.stringify(version.data))
+    };
+    versions.push(newVersion);
+
+    editingDataset.data = JSON.parse(JSON.stringify(version.data));
+    editingDataset.versions = versions;
+
+    // Update localStorage
+    var storedDatasets = JSON.parse(localStorage.getItem('mlapp_datasets_all') || '[]');
+    var idx = storedDatasets.findIndex(function(d) { return d.id === editingDataset.id; });
+    if (idx !== -1) {
+        storedDatasets[idx] = editingDataset;
+        localStorage.setItem('mlapp_datasets_all', JSON.stringify(storedDatasets));
+    }
+
+    saveDatasetToServer(editingDataset);
+
+    editingDatasetOriginal = JSON.parse(JSON.stringify(editingDataset));
+    pendingChanges = {};
+
+    closeVersionHistory();
+    renderEditableTable();
+    updateEditStatus();
+    refreshDatasets();
+
+    showToast('バージョン ' + version.version + ' に復元しました', 'success');
+}
