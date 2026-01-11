@@ -1464,6 +1464,7 @@ body {
 .status-complete { background: #d1fae5; color: #059669; }
 .status-failed { background: #fee2e2; color: #dc2626; }
 .status-waiting { background: #fef3c7; color: #d97706; }
+.status-queued { background: #f3f4f6; color: #6b7280; }
 
 .nav-item {
     display: flex;
@@ -2221,6 +2222,42 @@ body {
 .version-badge.previous {
     background: var(--gray-100);
     color: var(--gray-600);
+}
+
+.version-badge.modified {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--primary);
+}
+
+/* Model Status Badge */
+.model-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.model-status-badge.draft {
+    background: var(--gray-100);
+    color: var(--gray-600);
+}
+
+.model-status-badge.registered {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--primary);
+}
+
+.model-status-badge.production {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
+}
+
+.model-status-badge i {
+    font-size: 8px;
 }
 
 /* Dark Theme Editable Table */

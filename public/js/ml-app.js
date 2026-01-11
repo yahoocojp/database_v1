@@ -621,6 +621,7 @@ function renderDatasetTable(container) {
     html += '<th>データセット名</th>';
     html += '<th>行数</th>';
     html += '<th>列数</th>';
+    html += '<th>Ver</th>';
     html += '<th>作成日時</th>';
     html += '<th>操作</th>';
     html += '</tr></thead><tbody>';
@@ -628,16 +629,18 @@ function renderDatasetTable(container) {
     importedDatasets.forEach(function(dataset, index) {
         var createdDate = new Date(dataset.createdAt);
         var dateStr = createdDate.toLocaleDateString('ja-JP') + ' ' + createdDate.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+        var versionCount = dataset.versions ? dataset.versions.length : 1;
 
         html += '<tr>';
         html += '<td><div class="flex items-center gap-3">';
         html += '<div class="w-8 h-8 bg-blue-100 rounded flex items-center justify-center">';
         html += '<i class="fas fa-table text-blue-600 text-sm"></i></div>';
-        html += '<div><div class="font-medium text-gray-800">' + dataset.name + '</div>';
+        html += '<div><div class="font-medium text-gray-800">' + escapeHtml(dataset.name) + '</div>';
         html += '<div class="text-xs text-gray-500">' + dataset.columns.slice(0, 3).join(', ') + (dataset.columns.length > 3 ? '...' : '') + '</div>';
         html += '</div></div></td>';
         html += '<td><span class="text-sm text-gray-600">' + dataset.rows + '</span></td>';
         html += '<td><span class="text-sm text-gray-600">' + dataset.columns.length + '</span></td>';
+        html += '<td><span class="version-badge ' + (versionCount > 1 ? 'modified' : 'current') + '">v' + versionCount + '</span></td>';
         html += '<td><span class="text-sm text-gray-600">' + dateStr + '</span></td>';
         html += '<td><div class="flex items-center gap-2">';
         html += '<button class="btn btn-ghost btn-sm" onclick="viewDataset(' + index + ')" title="プレビュー"><i class="fas fa-eye"></i></button>';
@@ -1723,6 +1726,20 @@ function saveModel(runData) {
     var models = getModels();
     // Handle both formats: runData.metrics.r2 or runData.r2
     var r2Value = runData.metrics ? runData.metrics.r2 : runData.r2;
+
+    // Get dataset info for linking
+    var datasetId = runData.datasetId || null;
+    var datasetVersion = runData.datasetVersion || 1;
+    if (!datasetId && runData.dataset) {
+        // Try to find dataset by name
+        var storedDatasets = JSON.parse(localStorage.getItem('mlapp_datasets_all') || '[]');
+        var matchedDs = storedDatasets.find(function(ds) { return ds.name === runData.dataset; });
+        if (matchedDs) {
+            datasetId = matchedDs.id;
+            datasetVersion = matchedDs.versions ? matchedDs.versions.length : 1;
+        }
+    }
+
     var model = {
         id: runData.id || ('model_' + Date.now()),
         runId: runData.runId || runData.id,
@@ -1730,13 +1747,35 @@ function saveModel(runData) {
         name: runData.name || (runData.algorithm + ' - ' + runData.target),
         algorithm: runData.algorithm,
         dataset: runData.dataset,
+        datasetId: datasetId,
+        datasetVersion: datasetVersion,
         target: runData.target,
         features: runData.features,
         r2: r2Value,
+        status: 'draft',  // draft / registered / production
         createdAt: runData.createdAt
     };
     models.unshift(model);
     localStorage.setItem('mlapp_models', JSON.stringify(models));
+
+    // Link model to dataset
+    if (datasetId) {
+        linkModelToDataset(model.id, datasetId);
+    }
+}
+
+function linkModelToDataset(modelId, datasetId) {
+    var storedDatasets = JSON.parse(localStorage.getItem('mlapp_datasets_all') || '[]');
+    var dsIndex = storedDatasets.findIndex(function(ds) { return ds.id === datasetId; });
+    if (dsIndex !== -1) {
+        if (!storedDatasets[dsIndex].linkedModels) {
+            storedDatasets[dsIndex].linkedModels = [];
+        }
+        if (!storedDatasets[dsIndex].linkedModels.includes(modelId)) {
+            storedDatasets[dsIndex].linkedModels.push(modelId);
+            localStorage.setItem('mlapp_datasets_all', JSON.stringify(storedDatasets));
+        }
+    }
 }
 
 function generateMockSHAP(features) {
@@ -1755,6 +1794,29 @@ function generateMockSHAP(features) {
     return Object.entries(importance)
         .sort((a, b) => b[1] - a[1])
         .reduce((obj, [k, v]) => { obj[k] = v; return obj; }, {});
+}
+
+function getRunStatusInfo(run) {
+    var statusMap = {
+        'complete': { class: 'status-complete', icon: 'fa-check-circle', label: '完了' },
+        'completed': { class: 'status-complete', icon: 'fa-check-circle', label: '完了' },
+        'running': { class: 'status-running', icon: 'fa-spinner fa-spin', label: '実行中' },
+        'queued': { class: 'status-queued', icon: 'fa-clock', label: 'キュー待ち' },
+        'failed': { class: 'status-failed', icon: 'fa-times-circle', label: '失敗' },
+        'error': { class: 'status-failed', icon: 'fa-times-circle', label: 'エラー' }
+    };
+
+    var info = statusMap[run.status] || statusMap['running'];
+
+    // Add Job ID if available
+    if (run.jobId || run.mlflowRunId) {
+        var jobId = run.jobId || run.mlflowRunId;
+        var shortId = jobId.length > 12 ? jobId.substring(0, 12) + '...' : jobId;
+        info.jobId = shortId;
+        info.fullJobId = jobId;
+    }
+
+    return info;
 }
 
 function renderRunsTable() {
@@ -1784,12 +1846,15 @@ function renderRunsTable() {
 
     var html = '';
     runs.slice(0, 10).forEach(function(run) {
-        var typeIcon = run.type === 'train' ? 'fa-graduation-cap' : (run.type === 'predict' ? 'fa-magic' : 'fa-bullseye');
-        var typeColor = run.type === 'train' ? 'green' : (run.type === 'predict' ? 'purple' : 'blue');
-        var typeLabel = run.type === 'train' ? '学習' : (run.type === 'predict' ? '予測' : '最適化');
-        var statusClass = run.status === 'complete' ? 'status-complete' : (run.status === 'running' ? 'status-running' : 'status-failed');
-        var statusIcon = run.status === 'complete' ? 'fa-check-circle' : (run.status === 'running' ? 'fa-spinner fa-spin' : 'fa-times-circle');
-        var statusLabel = run.status === 'complete' ? '完了' : (run.status === 'running' ? '実行中' : '失敗');
+        var typeIcon = run.type === 'train' || run.type === 'training' ? 'fa-graduation-cap' : (run.type === 'predict' ? 'fa-magic' : 'fa-bullseye');
+        var typeColor = run.type === 'train' || run.type === 'training' ? 'green' : (run.type === 'predict' ? 'purple' : 'blue');
+        var typeLabel = run.type === 'train' || run.type === 'training' ? '学習' : (run.type === 'predict' ? '予測' : '最適化');
+
+        // Enhanced status handling
+        var statusInfo = getRunStatusInfo(run);
+        var statusClass = statusInfo.class;
+        var statusIcon = statusInfo.icon;
+        var statusLabel = statusInfo.label;
 
         var metricsHtml = '';
         if (run.metrics && run.metrics.r2) {
@@ -1817,7 +1882,10 @@ function renderRunsTable() {
             '<td><span class="text-sm text-gray-600">' + typeLabel + '</span></td>' +
             '<td><span class="text-sm text-gray-600">' + escapeHtml(run.dataset) + '</span></td>' +
             '<td>' + metricsHtml + '</td>' +
-            '<td><span class="status-badge ' + statusClass + '"><i class="fas ' + statusIcon + ' mr-1"></i>' + statusLabel + '</span></td>' +
+            '<td>' +
+                '<span class="status-badge ' + statusClass + '"><i class="fas ' + statusIcon + ' mr-1"></i>' + statusLabel + '</span>' +
+                (statusInfo.jobId ? '<div class="text-xs text-gray-400 mt-1" title="' + (statusInfo.fullJobId || '') + '">ID: ' + statusInfo.jobId + '</div>' : '') +
+            '</td>' +
             '<td><span class="text-sm text-gray-600">' + dateStr + '</span></td>' +
             '<td>' +
                 '<button class="btn btn-ghost" onclick="openRunDetail(\'' + run.id + '\')">' +
@@ -2436,18 +2504,163 @@ function renderModelsList() {
     var html = '';
     models.forEach(function(m) {
         var date = new Date(m.createdAt).toLocaleDateString('ja-JP');
+        var statusBadge = getModelStatusBadge(m.status);
+        var versionInfo = m.datasetVersion ? ' • v' + m.datasetVersion : '';
+
         html += '<div class="model-card">' +
-            '<div class="model-info">' +
-                '<div class="model-name">' + escapeHtml(m.name) + '</div>' +
-                '<div class="model-meta">' + escapeHtml(m.dataset) + ' • ' + date + '</div>' +
+            '<div class="model-info" style="flex: 1;">' +
+                '<div style="display: flex; align-items: center; gap: 8px;">' +
+                    '<div class="model-name">' + escapeHtml(m.name) + '</div>' +
+                    statusBadge +
+                '</div>' +
+                '<div class="model-meta">' + escapeHtml(m.dataset || '-') + versionInfo + ' • ' + date + '</div>' +
             '</div>' +
-            '<div class="model-score">R² ' + m.r2.toFixed(3) + '</div>' +
-            '<button class="btn btn-secondary" onclick="useModelForPredict(\'' + m.id + '\')">' +
-                '<i class="fas fa-magic"></i> 予測' +
-            '</button>' +
+            '<div class="model-score">R² ' + (m.r2 ? m.r2.toFixed(3) : '-') + '</div>' +
+            '<div style="display: flex; gap: 8px;">' +
+                '<button class="btn btn-secondary btn-sm" onclick="useModelForPredict(\'' + m.id + '\')" title="予測">' +
+                    '<i class="fas fa-magic"></i>' +
+                '</button>' +
+                '<button class="btn btn-secondary btn-sm" onclick="openModelRegistration(\'' + m.id + '\')" title="登録">' +
+                    '<i class="fas fa-cloud-upload-alt"></i>' +
+                '</button>' +
+            '</div>' +
         '</div>';
     });
     container.innerHTML = html;
+}
+
+function getModelStatusBadge(status) {
+    var badges = {
+        'draft': '<span class="model-status-badge draft"><i class="fas fa-pencil-alt"></i> Draft</span>',
+        'registered': '<span class="model-status-badge registered"><i class="fas fa-check"></i> Registered</span>',
+        'production': '<span class="model-status-badge production"><i class="fas fa-star"></i> Production</span>'
+    };
+    return badges[status] || badges['draft'];
+}
+
+function openModelRegistration(modelId) {
+    var models = getModels();
+    var model = models.find(function(m) { return m.id === modelId; });
+    if (!model) return;
+
+    // Create registration modal
+    var modal = document.getElementById('modelRegistrationModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modelRegistrationModal';
+        modal.className = 'modal-overlay';
+        modal.style.display = 'none';
+        modal.innerHTML = '<div class="modal-content" style="max-width: 500px;">' +
+            '<div class="modal-header">' +
+            '<h2 class="text-xl font-bold"><i class="fas fa-cloud-upload-alt" style="color: #6366f1; margin-right: 8px;"></i>モデル登録</h2>' +
+            '<button class="modal-close" onclick="closeModelRegistration()">&times;</button>' +
+            '</div>' +
+            '<div class="modal-body" id="modelRegistrationBody"></div>' +
+            '<div class="modal-footer">' +
+            '<button class="btn btn-secondary" onclick="closeModelRegistration()">キャンセル</button>' +
+            '<button class="btn btn-primary" id="btnRegisterModel" onclick="registerModel()"><i class="fas fa-check"></i> 登録</button>' +
+            '</div>' +
+            '</div>';
+        document.body.appendChild(modal);
+    }
+
+    var bodyHtml = '<div style="margin-bottom: 20px;">' +
+        '<div style="font-weight: 600; margin-bottom: 8px;">' + escapeHtml(model.name) + '</div>' +
+        '<div style="font-size: 13px; color: #6b7280;">' +
+            model.algorithm + ' • R²: ' + (model.r2 ? model.r2.toFixed(3) : '-') +
+        '</div>' +
+        '</div>';
+
+    bodyHtml += '<div class="form-group" style="margin-bottom: 16px;">' +
+        '<label style="display: block; font-weight: 500; margin-bottom: 6px;">登録名</label>' +
+        '<input type="text" id="regModelName" class="form-control" value="' + escapeHtml(model.name) + '" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px;">' +
+        '</div>';
+
+    bodyHtml += '<div class="form-group" style="margin-bottom: 16px;">' +
+        '<label style="display: block; font-weight: 500; margin-bottom: 6px;">ステージ</label>' +
+        '<select id="regModelStage" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px;">' +
+        '<option value="staging">Staging</option>' +
+        '<option value="production">Production</option>' +
+        '</select>' +
+        '</div>';
+
+    bodyHtml += '<div class="form-group">' +
+        '<label style="display: block; font-weight: 500; margin-bottom: 6px;">説明（任意）</label>' +
+        '<textarea id="regModelDesc" class="form-control" rows="3" placeholder="モデルの説明..." style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; resize: vertical;"></textarea>' +
+        '</div>';
+
+    if (model.mlflowRunId) {
+        bodyHtml += '<div style="margin-top: 16px; padding: 12px; background: #f3f4f6; border-radius: 8px; font-size: 12px;">' +
+            '<div style="color: #6b7280;">MLflow Run ID:</div>' +
+            '<div style="font-family: monospace; color: #374151;">' + model.mlflowRunId + '</div>' +
+            '</div>';
+    }
+
+    document.getElementById('modelRegistrationBody').innerHTML = bodyHtml;
+    window.registeringModelId = modelId;
+
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+}
+
+function closeModelRegistration() {
+    var modal = document.getElementById('modelRegistrationModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+    }
+    window.registeringModelId = null;
+}
+
+async function registerModel() {
+    if (!window.registeringModelId) return;
+
+    var modelName = document.getElementById('regModelName').value.trim();
+    var stage = document.getElementById('regModelStage').value;
+    var description = document.getElementById('regModelDesc').value.trim();
+
+    if (!modelName) {
+        showToast('モデル名を入力してください', 'warning');
+        return;
+    }
+
+    var models = getModels();
+    var modelIdx = models.findIndex(function(m) { return m.id === window.registeringModelId; });
+    if (modelIdx === -1) return;
+
+    var model = models[modelIdx];
+
+    // Try to register via MLflow API
+    try {
+        var response = await fetch('/api/ml/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                mlflow_run_id: model.mlflowRunId,
+                model_name: modelName,
+                stage: stage,
+                description: description
+            })
+        });
+
+        if (response.ok) {
+            var result = await response.json();
+            model.registeredName = modelName;
+            model.registeredVersion = result.version || 1;
+        }
+    } catch (e) {
+        console.log('MLflow registration API not available, updating locally');
+    }
+
+    // Update model status
+    model.status = stage === 'production' ? 'production' : 'registered';
+    model.registeredAt = new Date().toISOString();
+    models[modelIdx] = model;
+    localStorage.setItem('mlapp_models', JSON.stringify(models));
+
+    closeModelRegistration();
+    renderModelsList();
+    showToast('モデル「' + modelName + '」を ' + stage + ' に登録しました', 'success');
 }
 
 function useModelForPredict(modelId) {
@@ -3476,6 +3689,253 @@ function saveDatasetChanges() {
     updateEditStatus();
     renderEditableTable();
     refreshDatasets();
+
+    // Check for linked models and offer retraining
+    checkLinkedModelsForRetraining(editingDataset.id, newVersion.version);
+}
+
+function checkLinkedModelsForRetraining(datasetId, newVersion) {
+    var linkedModelIds = editingDataset.linkedModels || [];
+    if (linkedModelIds.length === 0) return;
+
+    var models = getModels();
+    var linkedModels = models.filter(function(m) {
+        return linkedModelIds.includes(m.id) && m.datasetVersion < newVersion;
+    });
+
+    if (linkedModels.length === 0) return;
+
+    // Show retraining suggestion dialog
+    setTimeout(function() {
+        openRetrainingModal(linkedModels, datasetId, newVersion);
+    }, 500);
+}
+
+function openRetrainingModal(linkedModels, datasetId, newVersion) {
+    // Create modal if not exists
+    var modal = document.getElementById('retrainingModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'retrainingModal';
+        modal.className = 'modal-overlay';
+        modal.style.display = 'none';
+        modal.innerHTML = '<div class="modal-content" style="max-width: 600px;">' +
+            '<div class="modal-header">' +
+            '<h2 class="text-xl font-bold"><i class="fas fa-sync-alt" style="color: #f59e0b; margin-right: 8px;"></i>モデル再学習の提案</h2>' +
+            '<button class="modal-close" onclick="closeRetrainingModal()">&times;</button>' +
+            '</div>' +
+            '<div class="modal-body" id="retrainingModalBody"></div>' +
+            '<div class="modal-footer">' +
+            '<button class="btn btn-secondary" onclick="closeRetrainingModal()">後で</button>' +
+            '<button class="btn btn-primary" id="btnStartRetraining" onclick="startRetraining()"><i class="fas fa-play"></i> 選択したモデルを再学習</button>' +
+            '</div>' +
+            '</div>';
+        document.body.appendChild(modal);
+    }
+
+    var bodyHtml = '<div style="margin-bottom: 16px; padding: 12px; background: #fef3c7; border-radius: 8px; color: #92400e;">' +
+        '<i class="fas fa-info-circle"></i> データセットが更新されました（v' + newVersion + '）。以下のモデルは古いバージョンで学習されています。' +
+        '</div>';
+
+    bodyHtml += '<div style="margin-bottom: 16px;">';
+    bodyHtml += '<label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;">' +
+        '<input type="checkbox" id="selectAllModels" onchange="toggleAllRetrainingModels(this.checked)" checked>' +
+        '<span style="font-weight: 600;">すべて選択</span></label>';
+    bodyHtml += '</div>';
+
+    bodyHtml += '<div id="retrainingModelList" style="max-height: 300px; overflow-y: auto;">';
+    linkedModels.forEach(function(model, idx) {
+        bodyHtml += '<div class="retrain-model-item" style="display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 8px;">';
+        bodyHtml += '<input type="checkbox" class="retrain-model-checkbox" data-model-id="' + model.id + '" checked>';
+        bodyHtml += '<div style="flex: 1;">';
+        bodyHtml += '<div style="font-weight: 600;">' + escapeHtml(model.name) + '</div>';
+        bodyHtml += '<div style="font-size: 12px; color: #6b7280;">' + model.algorithm + ' • R²: ' + (model.r2 ? model.r2.toFixed(3) : '-') + ' • 学習時: v' + model.datasetVersion + '</div>';
+        bodyHtml += '</div>';
+        bodyHtml += '<span class="version-badge previous">v' + model.datasetVersion + ' → v' + newVersion + '</span>';
+        bodyHtml += '</div>';
+    });
+    bodyHtml += '</div>';
+
+    document.getElementById('retrainingModalBody').innerHTML = bodyHtml;
+
+    // Store data for retraining
+    window.retrainingData = {
+        models: linkedModels,
+        datasetId: datasetId,
+        newVersion: newVersion
+    };
+
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+}
+
+function closeRetrainingModal() {
+    var modal = document.getElementById('retrainingModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+    }
+    window.retrainingData = null;
+}
+
+function toggleAllRetrainingModels(checked) {
+    var checkboxes = document.querySelectorAll('.retrain-model-checkbox');
+    checkboxes.forEach(function(cb) { cb.checked = checked; });
+}
+
+function startRetraining() {
+    if (!window.retrainingData) return;
+
+    var selectedModelIds = [];
+    document.querySelectorAll('.retrain-model-checkbox:checked').forEach(function(cb) {
+        selectedModelIds.push(cb.dataset.modelId);
+    });
+
+    if (selectedModelIds.length === 0) {
+        showToast('再学習するモデルを選択してください', 'warning');
+        return;
+    }
+
+    var modelsToRetrain = window.retrainingData.models.filter(function(m) {
+        return selectedModelIds.includes(m.id);
+    });
+
+    closeRetrainingModal();
+
+    // Queue retraining jobs
+    modelsToRetrain.forEach(function(model, idx) {
+        setTimeout(function() {
+            queueRetrainingJob(model, window.retrainingData.datasetId, window.retrainingData.newVersion);
+        }, idx * 500);
+    });
+
+    showToast(modelsToRetrain.length + ' 件のモデルを再学習キューに追加しました', 'success');
+}
+
+function queueRetrainingJob(model, datasetId, newVersion) {
+    // Get latest dataset data
+    var storedDatasets = JSON.parse(localStorage.getItem('mlapp_datasets_all') || '[]');
+    var dataset = storedDatasets.find(function(ds) { return ds.id === datasetId; });
+
+    if (!dataset) {
+        showToast('データセットが見つかりません: ' + datasetId, 'error');
+        return;
+    }
+
+    // Create a new run with same settings
+    var runId = 'run_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    var newRun = {
+        id: runId,
+        name: model.name + ' (再学習 v' + newVersion + ')',
+        type: 'training',
+        status: 'queued',
+        algorithm: model.algorithm,
+        dataset: dataset.name,
+        datasetId: datasetId,
+        datasetVersion: newVersion,
+        target: model.target,
+        features: model.features,
+        parentModelId: model.id,
+        createdAt: new Date().toISOString()
+    };
+
+    // Save run
+    var runs = JSON.parse(localStorage.getItem('mlapp_runs') || '[]');
+    runs.unshift(newRun);
+    localStorage.setItem('mlapp_runs', JSON.stringify(runs));
+
+    // Update runs view
+    renderRuns();
+
+    // Execute training (simplified - in production would call Databricks Job API)
+    executeRetraining(newRun, dataset);
+}
+
+async function executeRetraining(run, dataset) {
+    // Update status to running
+    updateRunStatus(run.id, 'running');
+
+    try {
+        // Check if ML API is available
+        var healthCheck = await fetch('/api/ml/health').catch(function() { return null; });
+        var useApi = healthCheck && healthCheck.ok;
+
+        if (useApi) {
+            // Use actual ML API
+            var response = await fetch('/api/ml/train', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dataset_id: dataset.name,
+                    model_type: run.algorithm.toLowerCase().replace(/\s+/g, '_'),
+                    x_columns: run.features,
+                    target: run.target
+                })
+            });
+
+            if (response.ok) {
+                var result = await response.json();
+                handleRetrainingComplete(run, result, dataset);
+            } else {
+                throw new Error('API error');
+            }
+        } else {
+            // Mock training
+            setTimeout(function() {
+                var mockResult = {
+                    r2: Math.random() * 0.2 + 0.75,
+                    mlflow_run_id: 'mock_' + Date.now()
+                };
+                handleRetrainingComplete(run, { result: mockResult }, dataset);
+            }, 2000);
+        }
+    } catch (e) {
+        console.error('Retraining failed:', e);
+        updateRunStatus(run.id, 'failed');
+        showToast('再学習に失敗しました: ' + run.name, 'error');
+    }
+}
+
+function handleRetrainingComplete(run, apiResult, dataset) {
+    var result = apiResult.result || apiResult;
+    var r2 = result.r2 || result.targets && Object.values(result.targets)[0] && Object.values(result.targets)[0].r2 || 0.85;
+
+    // Update run
+    var runs = JSON.parse(localStorage.getItem('mlapp_runs') || '[]');
+    var runIdx = runs.findIndex(function(r) { return r.id === run.id; });
+    if (runIdx !== -1) {
+        runs[runIdx].status = 'completed';
+        runs[runIdx].metrics = { r2: r2 };
+        runs[runIdx].mlflowRunId = result.mlflow_run_id;
+        runs[runIdx].completedAt = new Date().toISOString();
+        localStorage.setItem('mlapp_runs', JSON.stringify(runs));
+    }
+
+    // Save new model
+    saveModel({
+        algorithm: run.algorithm,
+        dataset: dataset.name,
+        datasetId: run.datasetId,
+        datasetVersion: run.datasetVersion,
+        target: run.target,
+        features: run.features,
+        r2: r2,
+        mlflowRunId: result.mlflow_run_id,
+        createdAt: new Date().toISOString()
+    });
+
+    renderRuns();
+    showToast('再学習完了: ' + run.name + ' (R²: ' + r2.toFixed(3) + ')', 'success');
+}
+
+function updateRunStatus(runId, status) {
+    var runs = JSON.parse(localStorage.getItem('mlapp_runs') || '[]');
+    var runIdx = runs.findIndex(function(r) { return r.id === runId; });
+    if (runIdx !== -1) {
+        runs[runIdx].status = status;
+        localStorage.setItem('mlapp_runs', JSON.stringify(runs));
+        renderRuns();
+    }
 }
 
 // Version History
