@@ -3512,11 +3512,25 @@ function openDatasetForEdit(index) {
     var dataset = storedDatasets[index];
     if (!dataset) return;
 
+    // Initialize versions array if not exists (for datasets imported before version tracking)
+    if (!dataset.versions || dataset.versions.length === 0) {
+        dataset.versions = [{
+            version: 1,
+            createdAt: dataset.createdAt || new Date().toISOString(),
+            description: '初期データ',
+            data: JSON.parse(JSON.stringify(dataset.data))
+        }];
+        // Save the initialized versions to localStorage
+        storedDatasets[index] = dataset;
+        localStorage.setItem('mlapp_datasets_all', JSON.stringify(storedDatasets));
+    }
+
     editingDataset = JSON.parse(JSON.stringify(dataset));
     editingDatasetOriginal = JSON.parse(JSON.stringify(dataset));
     pendingChanges = {};
 
-    document.getElementById('editModalTitle').textContent = dataset.name;
+    var currentVersion = editingDataset.versions.length;
+    document.getElementById('editModalTitle').textContent = dataset.name + ' (v' + currentVersion + ')';
     document.getElementById('editModalSubtitle').textContent = 'ダブルクリックでセルを編集 • ' + dataset.rows + '行 × ' + dataset.columns.length + '列';
     document.getElementById('editStatus').textContent = '変更なし';
     document.getElementById('btnSaveDataset').disabled = true;
