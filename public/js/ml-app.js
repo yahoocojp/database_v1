@@ -905,6 +905,11 @@ function downloadDatasetCSV(index) {
     showToast('CSVファイルをダウンロードしました (Excel対応 UTF-8 with BOM)');
 }
 
+// Alias for exportDataset button
+function exportDataset(index) {
+    downloadDatasetCSV(index);
+}
+
 function useDatasetForML(index) {
     var dataset = importedDatasets[index];
     if (!dataset) return;
